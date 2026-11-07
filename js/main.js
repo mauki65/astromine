@@ -1,10 +1,10 @@
-import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, prepare, evaluate, assignTiers, applyNhats } from './model.js';
-import { body, porkchop, fixedLaunch, depLEO, depMoon } from './lambert.js';
+import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
+import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert } from './pipeline.js';
+import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
 const $ = s => document.querySelector(s);
 const OZT = 0.0311034768;
-const LIVE = { XAU: 'Au', XAG: 'Ag', XPT: 'Pt', XPD: 'Pd', HG: 'Cu' };
 
 // ---------- state ----------
 const store = {
@@ -38,25 +38,9 @@ const typeLabel = o => o.comet ? 'Comet' : o.cls === 'D' && o.a > 4.5 ? (o.class
 const shortName = n => n.replace(/^\((.*)\)$/, '$1');
 
 // ---------- prices ----------
-function effectivePrices() {
-  const p = {};
-  for (const k of ORDER) p[k] = overrides[k] > 0 ? overrides[k] : (priceMeta[k]?.usdPerKg || 0);
-  return p;
-}
+function effectivePrices() { return pricesFrom(priceMeta, overrides); }
 async function refreshLive() {
-  let changed = false;
-  await Promise.all(Object.entries(LIVE).map(async ([sym, k]) => {
-    try {
-      const r = await fetch(`https://api.gold-api.com/price/${sym}`, { cache: 'no-store' });
-      const j = await r.json();
-      const v = sym === 'HG' ? j.price * 2.20462 : j.price / OZT;
-      if (v > 0) {
-        if (Math.abs(v - (priceMeta[k]?.usdPerKg || 0)) / v > 1e-4) changed = true;
-        priceMeta[k] = { ...priceMeta[k], usdPerKg: v, source: 'gold-api.com live spot', asOf: j.updatedAt || new Date().toISOString(), live: true };
-      }
-    } catch {}
-  }));
-  if (changed) { recompute(); renderMaterials(); }
+  if (await refreshSpot(priceMeta)) { recompute(); renderMaterials(); }
   updateStatus();
 }
 
@@ -67,7 +51,6 @@ async function load() {
     fetch('data/close-approaches.json', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ list: [] })),
   ]);
   priceMeta = pr.metals || {};
-  for (const c of ca.list || []) if (!cad.has(c.des)) cad.set(c.des, c);
   let ast;
   try { ast = await fetch('data/asteroids.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.json(); }); }
   catch {
@@ -76,23 +59,13 @@ async function load() {
     $('#tab-map').append(d); ast = { rows: [], fields: [] };
   }
   meta = { generated: ast.generated, source: ast.source, prices: pr.generated };
-  const nh = await fetch('data/nhats.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const NH = nh?.list || {};
-  const com = await fetch('data/comets.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const mk = F => r => {
-    const o = prepare(r, F);
+  const J = f => fetch(`data/${f}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const [nh, com, lam] = await Promise.all([J('nhats.json'), J('comets.json'), J('lambert.json')]);
+  meta.lambert = lam?.generated;
+  objs = buildObjects({ ast, com, nh, lam, cad: ca }, o => {
     o.B = orbitBasis(o.a, o.e, o.i, o.om, o.w);
     o.M0 = o.ma * Math.PI / 180;
-    const num = o.name.match(/^(\d+)\s/), prov = o.name.match(/\(([^)]+)\)/);
-    o.ca = (num && cad.get(num[1])) || (prov && cad.get(prov[1])) || null;
-    o.belt = !o.neo && !o.comet;
-    const n = NH[num?.[1]] || NH[prov?.[1]] || NH[shortName(o.name)];
-    if (n && !o.comet) applyNhats(o, n);
-    o.dvBase = { ...o.dv };
-    return o;
-  };
-  objs = ast.rows.map(mk(ast.fields));
-  if (com) objs.push(...com.rows.map(mk(com.fields)));
+  });
   posX = new Float32Array(objs.length); posY = new Float32Array(objs.length);
   recomputeNow(); renderFilters();
   // deep link: ?obj=Bennu opens that object (used by the report page)
@@ -110,8 +83,8 @@ async function load() {
 let rcTimer;
 function recomputeNow() {
   prices = effectivePrices();
-  for (const o of objs) { o.ev = evaluate(o, S, prices); o.evDate = o.dvDate && S.launchMode === 'date' ? evaluate({ ...o, dv: o.dvDate }, S, prices) : null; }
-  ranked = assignTiers(objs.filter(o => !o.comet), objs.filter(o => o.comet));
+  ranked = rankAll(objs, S, prices);   // same function the report and the hourly job use
+  for (const o of objs) o.evDate = o.dvDate && S.launchMode === 'date' ? evaluate({ ...o, dv: o.dvDate }, S, prices) : null;
   renderLegend(); renderList(); if (st.sel) renderDetail(st.sel); draw(); renderMaterials();
 }
 function recompute() { clearTimeout(rcTimer); rcTimer = setTimeout(recomputeNow, 30); }
@@ -131,7 +104,7 @@ const MAXR = 11; // AU shown
 
 function propagate() {
   pl = planets(st.jd);
-  if (st.sel && st.sel.lam && st.sel.lam.key !== lamKey()) optimise(st.sel, S.launchMode === 'date' ? 150 : (st.playing ? 1e9 : 400));
+  if (st.sel && S.launchMode === 'date' && st.sel.lamDate?.key !== lamKey()) optimise(st.sel, 150);
   for (let k = 0; k < objs.length; k++) {
     const o = objs[k];
     const [x, y] = posAt(o.B, o.M0 + o.B.n * (st.jd - o.epoch));
@@ -355,7 +328,15 @@ setInterval(() => { if (st.live && !st.playing && objs.length) { st.jd = jdNow()
 setInterval(async () => {  // pick up new catalogue/price commits from the hourly Action
   try { const j = await fetch('data/prices.json', { cache: 'no-store' }).then(r => r.json());
     let ch = false; for (const [k, m] of Object.entries(j.metals || {})) if (!priceMeta[k]?.live && priceMeta[k]?.usdPerKg !== m.usdPerKg) { priceMeta[k] = m; ch = true; }
-    if (ch) recompute(); } catch {}
+    if (ch) recompute();
+    // new trajectories from the hourly job → apply them so the map matches the report
+    const l = await fetch('data/lambert.json', { cache: 'no-store' }).then(r => r.json());
+    if (l.generated !== meta.lambert) {
+      meta.lambert = l.generated;
+      for (const o of objs) { const r = l.list[o.name]; if (r && !o.comet && r.at !== o.lam?.at) applyLambert(o, r); }
+      recompute();
+    }
+  } catch {}
 }, 300000);
 function updateDate() {
   const d = new Date((st.jd - 2440587.5) * 86400000);
@@ -398,7 +379,7 @@ function renderSettings() {
 }
 segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSettings(); recompute(); resetLambert(); });
 segment('#launch', S.launchMode, v => { S.launchMode = v; store.set('settings', S); resetLambert(); });
-function resetLambert() { for (const o of objs) if (o.lam || o.dvDate) { o.dv = { ...o.dvBase }; o.dvDate = null; o.lam = null; } if (st.sel) optimise(st.sel); recompute(); }
+function resetLambert() { for (const o of objs) if (o.lamDate || o.dvDate) { o.dvDate = null; o.lamDate = null; } if (st.sel) optimise(st.sel); recompute(); }
 $('#reset').onclick = () => { Object.assign(S, DEFAULTS); store.set('settings', S); segment('#base', S.base); segment('#launch', S.launchMode); resetLambert(); renderSettings(); recompute(); };
 $('#collapse-left').onclick = () => { const p = $('#mission'); p.classList.toggle('collapsed'); $('#collapse-left').textContent = p.classList.contains('collapsed') ? '+' : '–'; };
 
@@ -468,41 +449,45 @@ function select(o) {
   if (o) { renderDetail(o); optimise(o); }
   draw();
 }
-// Exact Lambert round trip for the selected object. Searches from the map date, so moving
-// the clock changes the result: either the best window ahead, or a launch on that exact day.
+// Best launch windows are precomputed hourly (data/lambert.json) and shared by every view.
+// "On map date" prices a launch on exactly the clock's date for the selected object only;
+// it never changes ranks or tiers.
 let lamTimer = 0, lamPending = false;
-function lamKey() { return `${S.launchMode}|${S.base}|${S.stayMonths}|${S.launchMode === 'date' ? Math.round(st.jd) : Math.floor(st.jd / 20)}`; }
+function lamKey() { return `${S.base}|${S.stayMonths}|${Math.round(st.jd)}`; }
 function optimise(o, delay = 30) {
-  if (!o || o.Q > 6 || (o.comet && o.a > 8)) return;
-  if (o.lam && o.lam.key === lamKey()) return;
-  if (lamPending && S.launchMode === 'date' && delay < 1e6) return;  // throttle while the clock runs
+  if (!o || S.launchMode !== 'date' || o.Q > 6 || o.comet) return;
+  if (o.lamDate && o.lamDate.key === lamKey()) return;
+  if (lamPending && delay < 1e6) return;            // throttle while the clock runs
   clearTimeout(lamTimer); lamPending = true;
-  o.lamBusy = !(o.lam && o.lam.mode === S.launchMode && S.launchMode === 'date');  // keep last result on screen while the clock runs
+  o.lamBusy = !o.lamDate;
   const box = $('#lam'); if (box) box.innerHTML = lamText(o);
   lamTimer = setTimeout(() => {
     lamPending = false;
-    if (st.sel !== o) { o.lamBusy = false; return; }
+    if (st.sel !== o || S.launchMode !== 'date') { o.lamBusy = false; return; }
     const jd = st.jd, pe = planetElements('Earth', jd), key = lamKey();
     const earth = body(pe.a, pe.e, pe.i, pe.om, pe.w, pe.M, jd);
     const ast = body(o.a, o.e, o.i, o.om, o.w, o.M0 + o.B.n * (jd - o.epoch), jd);
-    const opt = { stayDays: S.stayMonths * 30.44, base: S.base };
-    const r = S.launchMode === 'date' ? fixedLaunch(earth, ast, jd, opt) : porkchop(earth, ast, jd, { ...opt, step: 10 });
+    const r = fixedLaunch(earth, ast, jd, { stayDays: S.stayMonths * 30.44, base: S.base });
     o.lamBusy = false;
-    o.lam = r ? { ...r, key, mode: S.launchMode } : { none: true, key };
-    const dv = r ? { ...o.dvBase, leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert' } : null;
-    // best window feeds the ranking; a fixed launch date is shown for this object only
-    if (S.launchMode === 'date') o.dvDate = dv; else { o.dvDate = null; o.dv = dv || { ...o.dvBase }; }
+    o.lamDate = r ? { ...r, key } : { none: true, key };
+    o.dvDate = r ? { ...o.dv, leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert-date' } : null;
     recompute();
   }, delay);
 }
+const rt = d => (S.base === 'moon' ? d.moon : d.leo) + d.dvArr + d.ret;
 function lamText(o) {
-  const d = o.dv;
-  if (o.lamBusy) return S.launchMode === 'date' ? `Computing a launch on ${jdDate(st.jd)}…` : `Searching launch windows from ${jdDate(st.jd)} (10 years)…`;
-  if (o.lam?.tof) { const r = o.lam; return `<b>${r.mode === 'date' ? 'Launch on map date' : 'Best launch window'}</b> (Lambert-optimised, ${r.total.toFixed(2)} km/s total) — launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth (v∞) ${r.vEntry.toFixed(1)} km/s, captured by atmosphere.${d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : ''}`; }
-  if (o.lam?.none) return 'No round trip under 9 km/s departure found in the 10 years after the map date. Showing the estimate.';
-  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}).`;
-  if (o.Q > 6 || o.comet) return 'Δv is a Hohmann-transfer <b>estimate</b> (too far for the in-browser optimiser).';
-  return 'Δv is a Hohmann-transfer <b>estimate</b>.';
+  const d = o.dv, nh = d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : '';
+  const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth ${r.vEntry.toFixed(1)} km/s, captured by the atmosphere.`;
+  if (S.launchMode === 'date') {
+    if (o.Q > 6 || o.comet) return 'Fixed-date launches are only computed for objects within 6 AU (not comets).';
+    if (o.lamBusy || !o.lamDate) return `Computing a launch on ${jdDate(st.jd)}…`;
+    if (o.lamDate.none) return `No round trip found for a launch on ${jdDate(st.jd)}.`;
+    return `<b>Launch on map date</b> (${rt(o.dvDate || o.dv).toFixed(2)} km/s total) — ${legs(o.lamDate)}${o.lam ? ` Best window instead: ${jdDate(o.lam.t0)} at ${rt(o.dv).toFixed(2)} km/s.` : ''} <span class="muted">Rank and tier stay based on the best window.</span>`;
+  }
+  const stayNote = o.lam && Math.round(S.stayMonths * 30.44) !== o.lam.stay ? ` <span class="muted">(windows computed for a ${Math.round(o.lam.stay / 30.44)}-month stay)</span>` : '';
+  if (o.lam) return `<b>Best launch window</b> (exact trajectory, ${rt(d).toFixed(2)} km/s round trip) — ${legs(o.lam)}${nh}${stayNote}`;
+  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}). Exact trajectory pending in the hourly job.`;
+  return 'Δv is a Hohmann-transfer <b>estimate</b> — not a mining candidate at default costs, so no exact trajectory was computed.';
 }
 const jdDate = jd => new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
 function renderDetail(o) {
@@ -623,8 +608,8 @@ $('#about').innerHTML = `
 <h2>How much to trust each number</h2>
 <ul>
 <li><b>Data quality badge</b> on every object: <i>Confirmed</i> (visited or sampled by a spacecraft – Ryugu, Bennu, Itokawa, Eros, Vesta, Psyche), <i>Measured</i> (composition from a telescope spectrum), <i>Estimated</i> (guessed from how much light it reflects), <i>Guess</i> (no data – typical for that kind of orbit). Most of the catalogue is a Guess; treat those rankings as hypotheses.</li>
-<li><b>Δv</b> has three levels: NASA’s <b>NHATS</b> optimised round trips for ~thousands of accessible near-Earth asteroids (used in the ranking), an exact <b>Lambert-optimised</b> round trip computed in your browser when you open an object (launch dates within 10 years, your stay time, Earth return by atmospheric entry ≤ 12 km/s like NHATS), and a Hohmann <b>estimate</b> (marked ~) for everything else.</li>
-<li><b>Launch date matters.</b> Metal prices are market prices and don’t depend on where planets are, but mission cost does: Earth and the asteroid have to line up. When you open an object, the optimiser searches from the date on the map clock: <i>Best window ahead</i> finds the cheapest launch in the 10 years after that date, <i>Launch on map date</i> prices a launch on exactly that day (press play to watch costs swing as the geometry changes). The list ranking uses each object’s best window.</li>
+<li><b>Δv</b> has three levels, best first: an <b>exact trajectory</b> (Lambert-optimised round trip, best launch in the next 10 years, Earth return by atmospheric entry ≤ 12 km/s like NASA) computed every hour for every serious mining candidate; NASA’s <b>NHATS</b> optimised round trips for objects still queued; and a Hohmann <b>estimate</b> (marked ~) for everything else. The map, the list, the detail card and the Report page all use the same results, so the numbers always match.</li>
+<li><b>Launch date matters.</b> Metal prices are market prices and don’t depend on where planets are, but mission cost does: Earth and the asteroid have to line up. <i>Best window</i> (default) uses the cheapest launch in the next 10 years. <i>On map date</i> prices a launch on exactly the day on the map clock for the object you opened — press play to watch costs swing as the geometry changes. Ranks and tiers always use the best window, so they never change when you click or move the clock.</li>
 <li><b>Radar-scanned</b> badge: the asteroid was measured by Goldstone/Arecibo radar (count of delay + Doppler measurements from NASA/JPL), so its size and shape are well known.</li>
 <li>Sizes from brightness can be off by ×2 (mass by ×8). “(measured)” marks diameters from infrared or radar.</li>
 </ul>

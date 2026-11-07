@@ -62,7 +62,7 @@ export function lambert(r1, r2, t) {
   let flo = F(lo), fhi = F(hi);
   if (!(flo < 0 && fhi > 0)) return null;
   let z = 0;
-  for (let k = 0; k < 60; k++) {
+  for (let k = 0; k < 44; k++) {
     z = 0.5 * (lo + hi); const fz = F(z);
     if (Math.abs(fz) < 1e-12) break;
     if (fz < 0) lo = z; else hi = z;
@@ -79,33 +79,50 @@ export function lambert(r1, r2, t) {
 export const depLEO = vinf => Math.sqrt(vinf * vinf + 10.85 ** 2) - 7.67;
 export const depMoon = vinf => 1.40 + Math.sqrt(vinf * vinf + 1.44 ** 2) - 1.44;
 
-// Search: departures every `step` days for `years`; outbound TOF 30–720 d; fixed stay; return TOF 30–720 d.
-// Return leg ends with atmospheric entry (no braking burn), capped at 12 km/s entry v∞ like NASA NHATS.
-export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = 'earth', step = 8 } = {}) {
+// Search the next `years` for the cheapest round trip: coarse grid over departure date ×
+// outbound time of flight, then local refinement, then the same for the return leg.
+// Return leg ends with atmospheric entry (no braking burn), capped at 12 km/s like NASA NHATS.
+export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = 'earth' } = {}) {
   const dep = base === 'moon' ? depMoon : depLEO;
+  const out = (t0, tof) => {
+    const E = stateAt(earth, t0), A = stateAt(ast, t0 + tof);
+    const L = lambert(E.r, A.r, tof); if (!L) return null;
+    const vinf = norm(sub(L[0], E.v)) * KMS; if (vinf > 9) return null;
+    const arr = norm(sub(A.v, L[1])) * KMS;
+    return { t0, tof, vinf, d1: dep(vinf), arr, c: dep(vinf) + arr };
+  };
+  const back = (t1, tof) => {
+    const A = stateAt(ast, t1), E = stateAt(earth, t1 + tof);
+    const L = lambert(A.r, E.r, tof); if (!L) return null;
+    const vEntry = norm(sub(L[1], E.v)) * KMS; if (vEntry > 12) return null;
+    return { tofRet: tof, d3: norm(sub(L[0], A.v)) * KMS, vEntry };
+  };
+  // 1) coarse outbound grid
   const outs = [];
-  for (let t0 = jd0 + 30; t0 < jd0 + years * 365.25; t0 += step) {
-    const E = stateAt(earth, t0);
-    for (let tof = 30; tof <= 720; tof += 15) {
-      const A = stateAt(ast, t0 + tof);
-      const L = lambert(E.r, A.r, tof); if (!L) continue;
-      const vinf = norm(sub(L[0], E.v)) * KMS, arr = norm(sub(A.v, L[1])) * KMS;
-      if (vinf > 9) continue;
-      outs.push({ t0, tof, vinf, d1: dep(vinf), arr });
-    }
+  for (let t0 = jd0 + 30; t0 < jd0 + years * 365.25; t0 += 15)
+    for (let tof = 30; tof <= 720; tof += 30) { const o = out(t0, tof); if (o) outs.push(o); }
+  outs.sort((a, b) => a.c - b.c);
+  // 2) refine the best distinct windows
+  const seeds = [];
+  for (const o of outs) { if (seeds.every(s => Math.abs(s.t0 - o.t0) > 45 || Math.abs(s.tof - o.tof) > 90)) seeds.push(o); if (seeds.length >= 14) break; }
+  const refined = [];
+  for (const s of seeds) {
+    let b = s;
+    for (const [dt, dd] of [[10, 15], [4, 6], [2, 2]])
+      for (let t0 = b.t0 - dt * 2; t0 <= b.t0 + dt * 2; t0 += dt)
+        for (let tof = Math.max(20, b.tof - dd * 2); tof <= b.tof + dd * 2; tof += dd) { const o = out(t0, tof); if (o && o.c < b.c) b = o; }
+    refined.push(b);
   }
-  outs.sort((a, b) => (a.d1 + a.arr) - (b.d1 + b.arr));
+  // 3) return leg for each refined window
   let best = null;
-  for (const o of outs.slice(0, 60)) {
-    const t1 = o.t0 + o.tof + stayDays, A = stateAt(ast, t1);
-    for (let tof = 30; tof <= 720; tof += 10) {
-      const E = stateAt(earth, t1 + tof);
-      const L = lambert(A.r, E.r, tof); if (!L) continue;
-      const d3 = norm(sub(L[0], A.v)) * KMS, vEntry = norm(sub(L[1], E.v)) * KMS;
-      if (vEntry > 12) continue;
-      const total = o.d1 + o.arr + d3;
-      if (!best || total < best.total) best = { ...o, tofRet: tof, d3, vEntry, total, t1, t2: t1 + tof };
-    }
+  for (const o of refined) {
+    const t1 = o.t0 + o.tof + stayDays;
+    let r = null;
+    for (let tof = 30; tof <= 720; tof += 20) { const x = back(t1, tof); if (x && (!r || x.d3 < r.d3)) r = x; }
+    if (!r) continue;
+    for (const dd of [8, 3, 1]) for (let tof = r.tofRet - dd * 2; tof <= r.tofRet + dd * 2; tof += dd) { const x = tof >= 20 && back(t1, tof); if (x && x.d3 < r.d3) r = x; }
+    const total = o.d1 + o.arr + r.d3;
+    if (!best || total < best.total) best = { ...o, ...r, total, t1, t2: t1 + r.tofRet };
   }
   return best;
 }
