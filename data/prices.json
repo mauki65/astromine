@@ -1,41 +1,41 @@
 {
-  "generated": "2026-11-07T17:00:19.652Z",
+  "generated": "2026-11-07T18:09:58.288Z",
   "note": "usdPerKg values are auto-updated daily by the GitHub Action where a free source exists; Au/Ag/Pt/Pd/Cu are also refreshed live in the browser. Entries marked 'reference' have no free live feed - edit here or override in the app.",
   "metals": {
     "Au": {
       "usdPerKg": 130921,
       "source": "gold-api.com spot",
-      "asOf": "2026-11-07T17:00:07Z"
+      "asOf": "2026-11-07T18:09:37Z"
     },
     "Ag": {
       "usdPerKg": 1674.12,
       "source": "gold-api.com spot",
-      "asOf": "2026-11-07T17:00:07Z"
+      "asOf": "2026-11-07T18:09:36Z"
     },
     "Pt": {
       "usdPerKg": 49640.8,
       "source": "gold-api.com spot",
-      "asOf": "2026-11-07T17:00:11Z"
+      "asOf": "2026-11-07T18:09:40Z"
     },
     "Pd": {
       "usdPerKg": 33565.4,
       "source": "gold-api.com spot",
-      "asOf": "2026-11-07T17:00:10Z"
+      "asOf": "2026-11-07T18:09:39Z"
     },
     "Rh": {
       "usdPerKg": 295787,
       "source": "Umicore daily price",
-      "asOf": "2026-11-07T17:00:19.652Z"
+      "asOf": "2026-11-07T18:09:58.288Z"
     },
     "Ir": {
       "usdPerKg": 323115,
       "source": "Umicore daily price",
-      "asOf": "2026-11-07T17:00:19.652Z"
+      "asOf": "2026-11-07T18:09:58.288Z"
     },
     "Ru": {
       "usdPerKg": 62694,
       "source": "Umicore daily price",
-      "asOf": "2026-11-07T17:00:19.652Z"
+      "asOf": "2026-11-07T18:09:58.288Z"
     },
     "Os": {
       "usdPerKg": 12860,
@@ -45,7 +45,7 @@
     "Cu": {
       "usdPerKg": 14.0027,
       "source": "gold-api.com spot",
-      "asOf": "2026-11-07T17:00:11Z"
+      "asOf": "2026-11-07T18:09:39Z"
     },
     "Ni": {
       "usdPerKg": 15.675,
