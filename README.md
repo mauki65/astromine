@@ -22,10 +22,10 @@ Positions are recomputed every second from Keplerian elements.
 Composition comes from asteroid type → meteorite analogues (only Ryugu, Bennu, Itokawa, Eros, Vesta and Psyche have been visited). Every object carries a data-quality badge: **Confirmed**, **Measured**, **Estimated** or **Guess**. Sizes from brightness can be off by ×2. This is an exploration tool, not investment advice.
 
 ## How it runs
-Static site on GitHub Pages. A GitHub Action (`.github/workflows/update-data.yml`) runs `scripts/fetch-data.mjs` and `scripts/report.mjs` every hour and commits the results to `data/` and `report/`. No servers, no API keys.
+Static site on GitHub Pages. A GitHub Action (`.github/workflows/update-data.yml`) runs `scripts/fetch-data.mjs`, `scripts/lambert-batch.mjs` and `scripts/report.mjs` every hour and deploys the site with fresh data straight to GitHub Pages — data is not committed, so the repo stays small. No servers, no API keys.
 
 ```
-node scripts/fetch-data.mjs && node scripts/report.mjs   # Node 20+
+node scripts/fetch-data.mjs && node scripts/lambert-batch.mjs && node scripts/report.mjs   # Node 20+
 python3 -m http.server
 ```
 
