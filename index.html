@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Astromine — Asteroid Prospecting Map</title>
+<meta name="description" content="Interactive map of real asteroids between Venus and Jupiter, ranked by mining profit with live metal prices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='9' fill='none' stroke='%23ff9f1c' stroke-width='3'/></svg>">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark"></span>ASTROMINE</div>
+  <nav class="tabs">
+    <button data-tab="map" class="on">Map</button>
+    <button data-tab="materials">Materials</button>
+    <button data-tab="about">How it works</button>
+  </nav>
+  <div class="status" id="status">Loading…</div>
+</header>
+
+<main>
+  <section id="tab-map" class="tab on">
+    <canvas id="map"></canvas>
+    <div id="tip" class="tip"></div>
+
+    <aside class="panel left" id="mission">
+      <div class="ph"><span>Mission control</span><button class="icon" id="collapse-left" title="Collapse">–</button></div>
+      <div class="pb">
+        <div class="seg" id="base">
+          <button data-v="earth">Launch from Earth</button>
+          <button data-v="moon">Launch from Moon</button>
+        </div>
+        <div class="grid" id="settings"></div>
+        <button class="link" id="reset">Reset to defaults</button>
+      </div>
+    </aside>
+
+    <aside class="panel right" id="side">
+      <div id="detail" hidden></div>
+      <div id="targets">
+        <div class="ph"><span>Top targets</span><span class="muted" id="tcount"></span></div>
+        <input id="search" type="search" placeholder="Search asteroid…" autocomplete="off">
+        <div class="filters" id="filters"></div>
+        <ol id="tlist"></ol>
+      </div>
+    </aside>
+
+    <div class="timebar">
+      <button class="icon" id="play" title="Play/pause">▶</button>
+      <select id="speed" title="Simulation speed">
+        <option value="1">1 day/s</option><option value="7">1 wk/s</option>
+        <option value="30" selected>1 mo/s</option><option value="365">1 yr/s</option>
+      </select>
+      <span id="date" class="mono"></span>
+      <button class="link" id="now">Now</button>
+      <span class="sep"></span>
+      <div class="seg small" id="frame">
+        <button data-v="earth">Earth centre</button><button data-v="sun">Sun centre</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section id="tab-materials" class="tab">
+    <div class="page">
+      <h1>Materials & live market value</h1>
+      <p class="muted" id="mat-status"></p>
+      <div class="tablewrap"><table id="mat-table"></table></div>
+      <h2>Expected value of one tonne of raw asteroid, by type</h2>
+      <p class="muted">Bulk grade × current price, before recovery losses. Shows why metallic asteroids are the jackpot and why stony ones rarely pay.</p>
+      <div class="tablewrap"><table id="class-table"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-about" class="tab">
+    <div class="page prose" id="about"></div>
+  </section>
+</main>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

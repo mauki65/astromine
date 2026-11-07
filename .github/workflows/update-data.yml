@@ -1,0 +1,36 @@
+name: Update space data
+
+on:
+  schedule:
+    - cron: '17 3 * * *'   # daily 03:17 UTC
+    - cron: '17 15 * * *'  # and 15:17 UTC (prices)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/**', '.github/workflows/**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-data.mjs
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet && exit 0
+          git commit -m "data: update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase
+          git push
