@@ -93,6 +93,24 @@ async function comets() {
   console.log(`comets.json: ${rows.length}`);
 }
 
+// ---------- NASA NHATS: optimised round-trip Δv for accessible near-Earth asteroids ----------
+async function nhats() {
+  const out = {};
+  for (const launch of ['2025-2030', '2030-2035', '2035-2040']) {
+    const j = await getJSON(`https://ssd-api.jpl.nasa.gov/nhats.api?dv=12&dur=450&stay=8&launch=${launch}`);
+    for (const r of j.data || []) {
+      const dv = +r.min_dv?.dv, dur = +r.min_dv?.dur;
+      if (!(dv > 0)) continue;
+      if (!out[r.des] || dv < out[r.des].dv) out[r.des] = { dv, dur, w: launch, radar: (r.radar_obs_a === 'Y' || r.radar_obs_g === 'Y') ? 1 : 0 };
+    }
+  }
+  await writeFile(new URL('nhats.json', DATA), JSON.stringify({
+    generated: new Date().toISOString(),
+    source: 'NASA/JPL NHATS (dv<=12 km/s, dur<=450 d, stay>=8 d)', list: out,
+  }));
+  console.log(`nhats.json: ${Object.keys(out).length}`);
+}
+
 // ---------- Close approaches (next 120 days, < 0.05 AU) ----------
 async function closeApproaches() {
   const j = await getJSON('https://ssd-api.jpl.nasa.gov/cad.api?date-min=now&date-max=%2B120&dist-max=0.05&sort=date');
@@ -147,6 +165,6 @@ async function prices() {
   console.log('prices.json updated');
 }
 
-const results = await Promise.allSettled([asteroids(), closeApproaches(), prices(), comets()]);
+const results = await Promise.allSettled([asteroids(), closeApproaches(), prices(), comets(), nhats()]);
 for (const r of results) if (r.status === 'rejected') console.error(r.reason);
 if (results[0].status === 'rejected') process.exit(1);

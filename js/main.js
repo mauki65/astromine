@@ -1,5 +1,6 @@
-import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, prepare, evaluate, assignTiers } from './model.js';
-import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle } from './orbits.js';
+import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, prepare, evaluate, assignTiers, applyNhats } from './model.js';
+import { body, porkchop, depLEO, depMoon } from './lambert.js';
+import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
 const $ = s => document.querySelector(s);
 const OZT = 0.0311034768;
@@ -75,6 +76,8 @@ async function load() {
     $('#tab-map').append(d); ast = { rows: [], fields: [] };
   }
   meta = { generated: ast.generated, source: ast.source, prices: pr.generated };
+  const nh = await fetch('data/nhats.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const NH = nh?.list || {};
   const com = await fetch('data/comets.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
   const mk = F => r => {
     const o = prepare(r, F);
@@ -83,6 +86,9 @@ async function load() {
     const num = o.name.match(/^(\d+)\s/), prov = o.name.match(/\(([^)]+)\)/);
     o.ca = (num && cad.get(num[1])) || (prov && cad.get(prov[1])) || null;
     o.belt = !o.neo && !o.comet;
+    const n = NH[num?.[1]] || NH[prov?.[1]] || NH[shortName(o.name)];
+    if (n && !o.comet) applyNhats(o, n);
+    o.dvBase = { ...o.dv };
     return o;
   };
   objs = ast.rows.map(mk(ast.fields));
@@ -379,10 +385,12 @@ function renderSettings() {
   }).join('');
   $('#settings').querySelectorAll('input').forEach(inp => inp.oninput = () => {
     S[inp.dataset.k] = inp.type === 'checkbox' ? inp.checked : Math.max(0, +inp.value || 0);
+    if (inp.dataset.k === 'stayMonths') resetLambert();
     store.set('settings', S); recompute();
   });
 }
 segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSettings(); recompute(); });
+function resetLambert() { for (const o of objs) if (o.lam) { o.dv = { ...o.dvBase }; o.lam = null; } if (st.sel) optimise(st.sel); }
 $('#reset').onclick = () => { Object.assign(S, DEFAULTS); store.set('settings', S); segment('#base', S.base); renderSettings(); recompute(); };
 $('#collapse-left').onclick = () => { const p = $('#mission'); p.classList.toggle('collapsed'); $('#collapse-left').textContent = p.classList.contains('collapsed') ? '+' : '–'; };
 
@@ -406,6 +414,7 @@ const GROUPS = [['all', 'All'], ['neo', 'Near-Earth'], ['belt', 'Belt'], ['metal
 function renderFilters() {
   $('#filters').innerHTML = GROUPS.map(([k, l]) => `<button class="chip ${st.group === k ? 'on' : ''}" data-g="${k}">${l}</button>`).join('') +
     `<button class="chip ${st.onlyProfit ? 'on' : ''}" data-p="1">Profitable only</button>` +
+    `<div class="evkey">${Object.values(EVIDENCE).map(e => `<span title="${e.note}"><i class="evd" style="background:${e.color}"></i>${e.label}</span>`).join('')}</div>` +
     `<label class="tick"><input type="checkbox" id="show-comets" ${st.comets ? 'checked' : ''}> Show short-period comets <span class="muted">(${objs.filter(o => o.comet).length.toLocaleString()})</span></label>`;
   $('#show-comets').onchange = e => { st.comets = e.target.checked; store.set('comets', st.comets); if (!st.comets && st.sel?.comet) select(null); renderLegend(); renderList(); draw(); };
   $('#filters').querySelectorAll('.chip').forEach(b => b.onclick = () => {
@@ -427,7 +436,7 @@ function renderList() {
   $('#tcount').textContent = `${prof.toLocaleString()} profitable`;
   $('#tlist').innerHTML = list.map(o => `<li data-i="${objs.indexOf(o)}">
     <span class="bar" style="background:${o.tier.color}"></span>
-    <span><div class="n">${esc(shortName(o.name))}</div><div class="s">#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)} km/s</div></span>
+    <span><div class="n">${esc(shortName(o.name))}</div><div class="s"><i class="evd" style="background:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].label}"></i>#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)}${o.dv.src === 'estimate' ? '~' : ''} km/s</div></span>
     <span class="v ${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span></li>`).join('') || '<li class="muted" style="display:block">No matches</li>';
   $('#tlist').querySelectorAll('li[data-i]').forEach(li => li.onclick = () => { const o = objs[+li.dataset.i]; select(o); focus(o); });
 }
@@ -436,9 +445,35 @@ function renderList() {
 function select(o) {
   st.sel = o;
   $('#detail').hidden = !o; $('#targets').hidden = !!o;
-  if (o) renderDetail(o);
+  if (o) { renderDetail(o); optimise(o); }
   draw();
 }
+// Exact Lambert round trip for the selected object (runs once per object/settings).
+function optimise(o) {
+  if (o.lam || o.lamBusy || o.Q > 6 || o.comet && o.a > 8) return;
+  o.lamBusy = true;
+  const box = $('#lam'); if (box) box.textContent = 'Optimising trajectory over the next 10 years…';
+  setTimeout(() => {
+    const jd = jdNow(), pe = planetElements('Earth', jd);
+    const earth = body(pe.a, pe.e, pe.i, pe.om, pe.w, pe.M, jd);
+    const ast = body(o.a, o.e, o.i, o.om, o.w, o.M0 + o.B.n * (jd - o.epoch), jd);
+    const r = porkchop(earth, ast, jd, { stayDays: S.stayMonths * 30.44, step: 10 });
+    o.lamBusy = false;
+    o.lam = r || { none: true };
+    if (r) Object.assign(o.dv, { leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert' });
+    recompute();
+  }, 30);
+}
+function lamText(o) {
+  const d = o.dv;
+  if (o.lam?.tof) { const r = o.lam; return `<b>Lambert-optimised mission</b> — launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth (v∞) ${r.vEntry.toFixed(1)} km/s, captured by atmosphere.${d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : ''}`; }
+  if (o.lam?.none) return 'No round trip under 9 km/s departure found in the next 10 years. Showing the estimate.';
+  if (o.lamBusy) return 'Optimising trajectory over the next 10 years…';
+  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}).${d.nhats.radar ? ' Radar-observed.' : ''}`;
+  if (o.Q > 6 || o.comet) return 'Δv is a Hohmann-transfer <b>estimate</b> (too far for the in-browser optimiser).';
+  return 'Δv is a Hohmann-transfer <b>estimate</b>.';
+}
+const jdDate = jd => new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
 function renderDetail(o) {
   const ev = o.ev, T = o.tier, el = $('#detail');
   el.style.setProperty('--tier', T.color);
@@ -461,6 +496,7 @@ function renderDetail(o) {
     <div class="kv">
       <span>Type</span><span>${CLASSES[o.cls].label}</span>
       <span>Evidence</span><span>${esc(o.basis)}</span>
+      <span>Data quality</span><span><span class="ev" style="--c:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].note}">${EVIDENCE[o.evidence].label}</span></span>
       <span>Confidence</span><span>${conf} %</span>
       <span>Meteorite analogue</span><span>${CLASSES[o.cls].analog}</span>
     </div>
@@ -478,11 +514,12 @@ function renderDetail(o) {
       <span>Return fuel</span><span>${ev.useIsru ? 'made from asteroid water' : mass(ev.propRet) + ' carried'}</span>
     </div>
     <h3>Getting there</h3>
+    <div class="callout" id="lam">${lamText(o)}</div>
     <div class="kv">
       <span>Δv from ${S.base === 'moon' ? 'low lunar orbit' : 'low Earth orbit'}</span><span>${ev.dvOut.toFixed(2)} km/s</span>
       <span>Δv to return</span><span>${ev.dvRet.toFixed(2)} km/s</span>
-      <span>One-way trip</span><span>${(o.dv.transferYr * 12).toFixed(0)} months</span>
-      <span>Diameter</span><span>${o.dEst ? '~' : ''}${dist(o.D)}${o.dEst ? ' (from brightness)' : ''}</span>
+      <span>${o.lam?.tof ? 'Trip out / back' : 'One-way trip'}</span><span>${o.lam?.tof ? Math.round(o.lam.tof) + ' d / ' + Math.round(o.lam.tofRet) + ' d' : (o.dv.transferYr * 12).toFixed(0) + ' months'}</span>
+      <span>Diameter</span><span>${o.dEst ? '~' : ''}${dist(o.D)}${o.dEst ? ' (from brightness)' : ' (measured)'}</span>
       <span>Total mass</span><span>${mass(o.mass)}</span>
       <span>Orbit a / e / i</span><span>${o.a.toFixed(3)} AU / ${o.e.toFixed(3)} / ${o.i.toFixed(1)}°</span>
       <span>Perihelion – aphelion</span><span>${o.q.toFixed(2)} – ${o.Q.toFixed(2)} AU</span>
@@ -551,6 +588,12 @@ $('#about').innerHTML = `
 <li><b>Close approaches</b> — JPL Close-Approach API, next 120 days. Flagged as launch windows.</li>
 <li><b>Prices</b> — Au/Ag/Pt/Pd/Cu refresh every minute in your browser (gold-api.com); Rh/Ir/Ru are checked hourly (Umicore publishes once per business day); the rest are reference values.</li>
 </ul>
+<h2>How much to trust each number</h2>
+<ul>
+<li><b>Data quality badge</b> on every object: <i>Ground truth</i> (visited or sampled by a spacecraft – Ryugu, Bennu, Itokawa, Eros, Vesta, Psyche), <i>Spectrum</i> (telescope classification), <i>Albedo only</i> (type guessed from reflectivity), <i>Assumed</i> (no data – orbit statistics). Most of the catalogue is Assumed; treat those rankings as hypotheses.</li>
+<li><b>Δv</b> has three levels: NASA’s <b>NHATS</b> optimised round trips for ~thousands of accessible near-Earth asteroids (used in the ranking), an exact <b>Lambert-optimised</b> round trip computed in your browser when you open an object (launch dates within 10 years, your stay time, Earth return by atmospheric entry ≤ 12 km/s like NHATS), and a Hohmann <b>estimate</b> (marked ~) for everything else.</li>
+<li>Sizes from brightness can be off by ×2 (mass by ×8). “(measured)” marks diameters from infrared or radar.</li>
+</ul>
 <h2>Composition</h2>
 <p>Nobody has assayed these asteroids. Composition comes from the spectral class (or, failing that, the albedo or orbit) mapped to meteorite analogues: metallic asteroids ≈ iron meteorites (~90% iron-nickel, 10–50 ppm platinum-group metals), stony ≈ ordinary chondrites, carbonaceous ≈ CI/CM chondrites (up to ~10–20% water). Each material gets a <i>chance</i> that reflects how sure we are of the class.</p>
 <h2>Mission model</h2>
@@ -560,7 +603,7 @@ $('#about').innerHTML = `
 <li>Propellant from the rocket equation with your Isp. Return fuel can be made from asteroid water (C/D/X types).</li>
 <li>Cargo is filled with the most valuable material first. Selling hundreds of tonnes of rhodium crashes its price — the market-impact switch models that.</li>
 <li>Profit = expected revenue × (1 − failure risk) − launch − spacecraft − operations − processing.</li>
-<li>Rarity is your rank by expected profit: top 0.1% Mythic, 0.5% Legendary, 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
+<li>Rarity is your rank by expected profit: top 0.02% Mythic (and only if actually profitable), 0.5% Legendary, 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
 </ul>
 <p class="muted">First-order estimates for exploring the trade-offs, not investment advice.</p>`;
 

@@ -60,5 +60,11 @@ export function planets(jd) {
   return out;
 }
 
+export function planetElements(name, jd) {
+  const p = PL[name], T = (jd - 2451545) / 36525;
+  const [a, e, i, L, wbar, O] = p.el.map((v, k) => v + p.r[k] * T);
+  return { a, e, i, om: O, w: wbar - O, M: (L - wbar) * D2R };
+}
+
 // Moon geocentric direction (mean longitude only – for display)
 export function moonAngle(jd) { return (218.316 + 13.176396 * (jd - 2451545)) * D2R; }

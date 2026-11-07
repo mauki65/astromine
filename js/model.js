@@ -50,7 +50,7 @@ export const CLASSES = {
 };
 
 export const TIERS = [
-  { key: 'mythic',    label: 'Mythic',    color: '#ff2e3f', top: 0.001 },
+  { key: 'mythic',    label: 'Mythic',    color: '#ff2e3f', top: 0.0002 },  // top 0.02% AND profitable
   { key: 'legendary', label: 'Legendary', color: '#ff9f1c', top: 0.005 },
   { key: 'epic',      label: 'Epic',      color: '#b26bff', top: 0.025 },
   { key: 'rare',      label: 'Rare',      color: '#3a8bff', top: 0.09 },
@@ -58,8 +58,25 @@ export const TIERS = [
   { key: 'common',    label: 'Common',    color: '#8a8f98', top: 1 },
 ];
 
+// Bodies visited by spacecraft: composition from returned samples / in-situ measurements.
+const GROUND_TRUTH = {
+  '162173': { cls: 'C', basis: 'Hayabusa2 returned sample (2020): CI-chondrite-like, hydrated clays' },
+  '101955': { cls: 'C', basis: 'OSIRIS-REx returned sample (2023): carbon- and water-rich' },
+  '25143':  { cls: 'S', basis: 'Hayabusa returned sample (2010): LL ordinary chondrite' },
+  '433':    { cls: 'S', basis: 'NEAR Shoemaker orbiter (2000–01): ordinary-chondrite composition' },
+  '4':      { cls: 'V', basis: 'Dawn orbiter (2011–12): basaltic HED parent body' },
+  '16':     { cls: 'M', basis: 'Spectra + radar: metal-rich; NASA Psyche mission arrives 2029' },
+};
+export const EVIDENCE = {
+  sample:   { label: 'Ground truth',  color: '#3fcf6e', note: 'Measured by a spacecraft or returned sample' },
+  measured: { label: 'Spectrum',      color: '#3a8bff', note: 'Telescope spectrum classifies the surface' },
+  inferred: { label: 'Albedo only',   color: '#e9c46a', note: 'Type guessed from brightness (reflectivity)' },
+  assumed:  { label: 'Assumed',       color: '#8a909c', note: 'No data – population statistics for this orbit' },
+};
 function classify(o) {
-  if (o.comet) return { cls: 'K', conf: 0.8, basis: `Comet (${o.class || 'short-period'})` };
+  const num = (o.name || '').match(/^(\d+)\s/)?.[1];
+  if (num && GROUND_TRUTH[num]) return { ...GROUND_TRUTH[num], conf: 0.97, evidence: 'sample' };
+  if (o.comet) return { cls: 'K', conf: 0.8, basis: `Comet (${o.class || 'short-period'}) – Rosetta/67P analogue`, evidence: 'measured' };
   const t = (o.spec_B || o.spec_T || '').trim();
   if (t) {
     const s = t.replace(/[^A-Za-z]/g, '');
@@ -73,18 +90,18 @@ function classify(o) {
     else if (/^Q/.test(u)) c = 'Q';
     else if (/^[VR]/.test(u)) c = 'V';
     else c = 'S';  // S, Sq, Sr, K, L, A, O...
-    return { cls: c, conf: 0.85, basis: `Spectral type ${t}` };
+    return { cls: c, conf: 0.85, basis: `Spectral type ${t}`, evidence: 'measured' };
   }
   if (o.albedo != null) {
     const p = o.albedo;
-    if (p < 0.1) return { cls: 'C', conf: 0.5, basis: `Albedo ${p.toFixed(3)} (dark)` };
-    if (p < 0.3) return { cls: 'S', conf: 0.5, basis: `Albedo ${p.toFixed(3)} (moderate)` };
-    return { cls: 'E', conf: 0.35, basis: `Albedo ${p.toFixed(3)} (bright)` };
+    if (p < 0.1) return { cls: 'C', conf: 0.5, basis: `Albedo ${p.toFixed(3)} (dark)`, evidence: 'inferred' };
+    if (p < 0.3) return { cls: 'S', conf: 0.5, basis: `Albedo ${p.toFixed(3)} (moderate)`, evidence: 'inferred' };
+    return { cls: 'E', conf: 0.35, basis: `Albedo ${p.toFixed(3)} (bright)`, evidence: 'inferred' };
   }
-  if (o.a > 4.5) return { cls: 'D', conf: 0.3, basis: 'No spectra – Trojan/Centaur statistics' };
-  if (o.a > 3.0) return { cls: 'C', conf: 0.25, basis: 'No spectra – outer-belt statistics' };
-  if (o.a > 2.6) return { cls: 'C', conf: 0.2, basis: 'No spectra – mid-belt statistics' };
-  return { cls: 'S', conf: 0.25, basis: 'No spectra – inner/NEO statistics' };
+  if (o.a > 4.5) return { cls: 'D', conf: 0.3, basis: 'No spectra – Trojan/Centaur statistics', evidence: 'assumed' };
+  if (o.a > 3.0) return { cls: 'C', conf: 0.25, basis: 'No spectra – outer-belt statistics', evidence: 'assumed' };
+  if (o.a > 2.6) return { cls: 'C', conf: 0.2, basis: 'No spectra – mid-belt statistics', evidence: 'assumed' };
+  return { cls: 'S', conf: 0.25, basis: 'No spectra – inner/NEO statistics', evidence: 'assumed' };
 }
 
 // ---------- delta-v (patched conic, Earth orbit = 1 AU circular) ----------
@@ -109,7 +126,16 @@ function deltaV(a, e, incDeg) {
   // from low lunar orbit: 1.40 km/s to Earth-Moon escape (C3=0), plus hyperbolic excess
   const moon = 1.40 + Math.sqrt(vinf * vinf + 1.44 ** 2) - 1.44;
   const transferYr = Math.min(8, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
-  return { vinf, dvArr, leo, moon, ret: dvArr + 0.3, transferYr };
+  return { vinf, dvArr, leo, moon, ret: dvArr + 0.3, transferYr, src: 'estimate' };
+}
+
+// NASA NHATS: round trip from a 400 km LEO, >=8 day stay, <=450 days, Earth return by
+// atmospheric entry. Rescale our Δv split so its total matches NASA's optimised value.
+export function applyNhats(o, n) {
+  const d = o.dv, est = d.leo + d.dvArr + d.ret, k = n.dv / est, lm = d.leo - d.moon;
+  d.leo *= k; d.dvArr *= k; d.ret *= k; d.moon = Math.max(0.5, d.leo - lm);
+  d.transferYr = Math.max(30, (n.dur - 8) / 2) / 365.25;
+  d.src = 'nhats'; d.nhats = n;
 }
 
 export function prepare(row, F) {
@@ -195,11 +221,13 @@ export function assignTiers(objs, extra = []) {
   sorted.forEach((o, r) => {
     const f = (r + 1) / n;
     o.tier = TIERS.find(t => f <= t.top);
+    if (o.tier.key === 'mythic' && !(o.ev.profit > 0)) o.tier = TIERS[1];
     o.rank = r + 1;
     floor[o.tier.key] = o.ev.profit;
   });
   for (const o of extra) {
     o.tier = TIERS.find(t => floor[t.key] !== undefined && o.ev.profit >= floor[t.key]) || TIERS[TIERS.length - 1];
+    if (o.tier.key === 'mythic' && !(o.ev.profit > 0)) o.tier = TIERS[1];
     let lo = 0, hi = n;  // rank = position among asteroids
     while (lo < hi) { const m = (lo + hi) >> 1; sorted[m].ev.profit > o.ev.profit ? lo = m + 1 : hi = m; }
     o.rank = lo + 1;
