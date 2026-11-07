@@ -15,7 +15,7 @@ delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
 const st = {
   jd: jdNow(), live: true, playing: false, speed: 30, frame: store.get('frame', 'earth'),
   view: { cx: 0, cy: 0, scale: 1 }, sel: null, hover: null,
-  tiers: new Set(TIERS.map(t => t.key)), group: 'all', onlyProfit: false, query: '',
+  tiers: new Set(TIERS.map(t => t.key)), comets: store.get('comets', false), group: 'all', onlyProfit: false, query: '',
 };
 let objs = [], ranked = [], prices = {}, priceMeta = {}, overrides = store.get('overrides', {});
 let posX, posY, pl, cad = new Map(), meta = {};
@@ -33,6 +33,7 @@ const mass = kg => kg >= 1e12 ? (kg / 1e12).toPrecision(3) + ' Gt' : kg >= 1e9 ?
 const grade = g => g >= 0.001 ? +(g * 100).toPrecision(2) + ' %' : +(g * 1e6).toPrecision(2) + ' ppm';
 const dist = km => km >= 1 ? km.toPrecision(3) + ' km' : Math.round(km * 1000) + ' m';
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const typeLabel = o => o.comet ? 'Comet' : o.cls === 'D' && o.a > 4.5 ? (o.class === 'TJN' ? 'Trojan · D-type' : 'D-type') : o.cls + '-type';
 const shortName = n => n.replace(/^\((.*)\)$/, '$1');
 
 // ---------- prices ----------
@@ -74,17 +75,20 @@ async function load() {
     $('#tab-map').append(d); ast = { rows: [], fields: [] };
   }
   meta = { generated: ast.generated, source: ast.source, prices: pr.generated };
-  objs = ast.rows.map(r => {
-    const o = prepare(r, ast.fields);
+  const com = await fetch('data/comets.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const mk = F => r => {
+    const o = prepare(r, F);
     o.B = orbitBasis(o.a, o.e, o.i, o.om, o.w);
     o.M0 = o.ma * Math.PI / 180;
     const num = o.name.match(/^(\d+)\s/), prov = o.name.match(/\(([^)]+)\)/);
     o.ca = (num && cad.get(num[1])) || (prov && cad.get(prov[1])) || null;
-    o.belt = !o.neo;
+    o.belt = !o.neo && !o.comet;
     return o;
-  });
+  };
+  objs = ast.rows.map(mk(ast.fields));
+  if (com) objs.push(...com.rows.map(mk(com.fields)));
   posX = new Float32Array(objs.length); posY = new Float32Array(objs.length);
-  recomputeNow();
+  recomputeNow(); renderFilters();
   fit();
   propagate();
   refreshLive();
@@ -95,7 +99,7 @@ let rcTimer;
 function recomputeNow() {
   prices = effectivePrices();
   for (const o of objs) o.ev = evaluate(o, S, prices);
-  ranked = assignTiers(objs);
+  ranked = assignTiers(objs.filter(o => !o.comet), objs.filter(o => o.comet));
   renderLegend(); renderList(); if (st.sel) renderDetail(st.sel); draw(); renderMaterials();
 }
 function recompute() { clearTimeout(rcTimer); rcTimer = setTimeout(recomputeNow, 30); }
@@ -111,6 +115,7 @@ function resize() {
   draw();
 }
 function fit() { st.view = { cx: 0, cy: 0, scale: Math.min(W, H) / 2 / (st.frame === 'earth' ? 6.3 : 5.6) }; }
+const MAXR = 11; // AU shown
 
 function propagate() {
   pl = planets(st.jd);
@@ -126,11 +131,12 @@ const origin = () => st.frame === 'earth' && pl ? pl.Earth.pos : [0, 0];
 const toS = (x, y, O) => [W / 2 + (x - O[0] - st.view.cx) * st.view.scale, H / 2 - (y - O[1] - st.view.cy) * st.view.scale];
 
 function visible(o) {
+  if (o.comet && !st.comets) return false;
   if (!st.tiers.has(o.tier.key)) return false;
   if (st.group === 'neo' && !o.neo) return false;
   if (st.group === 'belt' && o.neo) return false;
   if (st.group === 'metal' && !(o.cls === 'M' || o.cls === 'X')) return false;
-  if (st.group === 'water' && !(o.cls === 'C' || o.cls === 'D')) return false;
+  if (st.group === 'water' && !(o.cls === 'C' || o.cls === 'D' || o.cls === 'K')) return false;
   if (st.onlyProfit && o.ev.profit <= 0) return false;
   return true;
 }
@@ -154,7 +160,8 @@ function drawNow() {
   // distance rings (AU) around frame origin
   ctx.strokeStyle = '#11141a'; ctx.lineWidth = 1; ctx.fillStyle = '#2a2f3a'; ctx.font = '10px JetBrains Mono, monospace';
   const [ox, oy] = toS(O[0], O[1], O);
-  for (let r = 1; r <= 6; r++) {
+  for (let r = 1; r <= (st.frame === 'earth' ? MAXR + 1 : MAXR); r++) {
+    if (r > 6 && r % 2) continue;
     ctx.beginPath(); ctx.arc(ox, oy, r * sc, 0, Math.PI * 2); ctx.stroke();
     ctx.fillText(r + ' AU', ox + 4, oy - r * sc - 3);
   }
@@ -212,6 +219,24 @@ function drawNow() {
     }
   }
 
+  // comets: tier-coloured diamond + anti-sunward tail
+  if (st.comets) {
+    for (let k = 0; k < objs.length; k++) {
+      const o = objs[k]; if (!o.comet || !visible(o)) continue;
+      const [sx, sy] = toS(posX[k], posY[k], O);
+      if (sx < -40 || sy < -40 || sx > W + 40 || sy > H + 40) continue;
+      const r = Math.hypot(posX[k], posY[k]), L = Math.max(0, 28 * (3 - r) / 3);
+      if (L > 1) {
+        const ux = posX[k] / r, uy = -posY[k] / r, g = ctx.createLinearGradient(sx, sy, sx + ux * L, sy + uy * L);
+        g.addColorStop(0, 'rgba(111,195,223,.7)'); g.addColorStop(1, 'rgba(111,195,223,0)');
+        ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ux * L, sy + uy * L); ctx.stroke();
+      }
+      const d = o.tier.key === 'common' ? 2.5 : 3.5;
+      ctx.strokeStyle = o.tier.color; ctx.fillStyle = '#06070a'; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(sx, sy - d); ctx.lineTo(sx + d, sy); ctx.lineTo(sx, sy + d); ctx.lineTo(sx - d, sy); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+
   // selected orbit
   for (const o of [st.hover, st.sel]) {
     if (!o) continue;
@@ -236,6 +261,7 @@ function drawNow() {
   for (const p of Object.values(pl)) {
     const [px, py] = toS(p.pos[0], p.pos[1], O);
     ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill();
+    if (p.ring) { ctx.strokeStyle = 'rgba(227,207,143,.6)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(px, py, p.size + 5, (p.size + 5) * 0.35, -0.4, 0, Math.PI * 2); ctx.stroke(); }
     ctx.fillStyle = '#9aa0ab'; ctx.fillText(p.name, px + p.size + 5, py + 4);
     if (p.name === 'Earth') {
       const a = moonAngle(st.jd), mr = Math.max(14, 0.00257 * sc);
@@ -274,7 +300,7 @@ cv.addEventListener('pointermove', e => {
   const tip = $('#tip');
   if (o) {
     tip.style.display = 'block'; tip.style.left = (mx + 14) + 'px'; tip.style.top = (my + 10) + 'px';
-    tip.innerHTML = `<b style="color:${o.tier.color}">${esc(shortName(o.name))}</b> · ${o.tier.label}<br><span class="muted">${o.cls}-type · ${dist(o.D)} · </span><span class="${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span>`;
+    tip.innerHTML = `<b style="color:${o.tier.color}">${esc(shortName(o.name))}</b> · ${o.tier.label}<br><span class="muted">${typeLabel(o)} · ${dist(o.D)} · </span><span class="${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span>`;
   } else tip.style.display = 'none';
 });
 cv.addEventListener('pointerup', e => {
@@ -286,13 +312,13 @@ cv.addEventListener('pointerleave', () => { st.hover = null; $('#tip').style.dis
 cv.addEventListener('wheel', e => {
   e.preventDefault();
   const r = cv.getBoundingClientRect(), mx = e.clientX - r.left - W / 2, my = e.clientY - r.top - H / 2;
-  const f = Math.exp(-e.deltaY * 0.0015), s0 = st.view.scale, s1 = Math.min(20000, Math.max(20, s0 * f));
+  const f = Math.exp(-e.deltaY * 0.0015), s0 = st.view.scale, s1 = Math.min(20000, Math.max(Math.min(W, H) / 2 / 13, s0 * f));
   st.view.cx += mx / s0 - mx / s1; st.view.cy -= my / s0 - my / s1; st.view.scale = s1; draw();
 }, { passive: false });
 // pinch zoom
 const touches = new Map(); let pinch0 = null;
 cv.addEventListener('touchstart', e => { if (e.touches.length === 2) { const [a, b] = e.touches; pinch0 = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), s: st.view.scale }; drag = null; } }, { passive: true });
-cv.addEventListener('touchmove', e => { if (pinch0 && e.touches.length === 2) { const [a, b] = e.touches; st.view.scale = Math.min(20000, Math.max(20, pinch0.s * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / pinch0.d)); draw(); } }, { passive: true });
+cv.addEventListener('touchmove', e => { if (pinch0 && e.touches.length === 2) { const [a, b] = e.touches; st.view.scale = Math.min(20000, Math.max(Math.min(W, H) / 2 / 13, pinch0.s * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / pinch0.d)); draw(); } }, { passive: true });
 cv.addEventListener('touchend', () => { pinch0 = null; touches.clear(); });
 
 function focus(o) {
@@ -370,7 +396,7 @@ function segment(sel, val, cb) {
 
 // ---------- UI: legend, filters, list ----------
 function renderLegend() {
-  const counts = {}; for (const o of objs) counts[o.tier.key] = (counts[o.tier.key] || 0) + 1;
+  const counts = {}; for (const o of objs) if (!o.comet || st.comets) counts[o.tier.key] = (counts[o.tier.key] || 0) + 1;
   $('#legend').innerHTML = [...TIERS].map(t => `<button data-t="${t.key}" class="${st.tiers.has(t.key) ? '' : 'off'}"><i style="border-color:${t.color}"></i><b>${t.label}</b><span class="mono">${(counts[t.key] || 0).toLocaleString()}</span></button>`).join('');
   $('#legend').querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.t; st.tiers.has(k) ? st.tiers.delete(k) : st.tiers.add(k); renderLegend(); renderList(); draw();
@@ -379,7 +405,9 @@ function renderLegend() {
 const GROUPS = [['all', 'All'], ['neo', 'Near-Earth'], ['belt', 'Belt'], ['metal', 'Metal-rich'], ['water', 'Water-rich']];
 function renderFilters() {
   $('#filters').innerHTML = GROUPS.map(([k, l]) => `<button class="chip ${st.group === k ? 'on' : ''}" data-g="${k}">${l}</button>`).join('') +
-    `<button class="chip ${st.onlyProfit ? 'on' : ''}" data-p="1">Profitable only</button>`;
+    `<button class="chip ${st.onlyProfit ? 'on' : ''}" data-p="1">Profitable only</button>` +
+    `<label class="tick"><input type="checkbox" id="show-comets" ${st.comets ? 'checked' : ''}> Show short-period comets <span class="muted">(${objs.filter(o => o.comet).length.toLocaleString()})</span></label>`;
+  $('#show-comets').onchange = e => { st.comets = e.target.checked; store.set('comets', st.comets); if (!st.comets && st.sel?.comet) select(null); renderLegend(); renderList(); draw(); };
   $('#filters').querySelectorAll('.chip').forEach(b => b.onclick = () => {
     if (b.dataset.p) st.onlyProfit = !st.onlyProfit; else st.group = b.dataset.g;
     renderFilters(); renderList(); draw();
@@ -391,6 +419,7 @@ function renderList() {
   const q = st.query;
   const list = [];
   for (const o of ranked) {
+    if (o.comet && !st.comets) continue;
     if (q ? !o.name.toLowerCase().includes(q) : !visible(o)) continue;
     list.push(o); if (list.length >= 60) break;
   }
@@ -398,7 +427,7 @@ function renderList() {
   $('#tcount').textContent = `${prof.toLocaleString()} profitable`;
   $('#tlist').innerHTML = list.map(o => `<li data-i="${objs.indexOf(o)}">
     <span class="bar" style="background:${o.tier.color}"></span>
-    <span><div class="n">${esc(shortName(o.name))}</div><div class="s">#${o.rank} · ${o.cls}-type · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)} km/s</div></span>
+    <span><div class="n">${esc(shortName(o.name))}</div><div class="s">#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)} km/s</div></span>
     <span class="v ${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span></li>`).join('') || '<li class="muted" style="display:block">No matches</li>';
   $('#tlist').querySelectorAll('li[data-i]').forEach(li => li.onclick = () => { const o = objs[+li.dataset.i]; select(o); focus(o); });
 }
@@ -517,7 +546,8 @@ $('#about').innerHTML = `
 <p>You run a space-mining company. Every dot is a real asteroid tracked by NASA/JPL, placed where it actually is today. Your job: pick the ones that make money and skip the ones that don’t.</p>
 <h2>Data</h2>
 <ul>
-<li><b>Orbits</b> — NASA/JPL Small-Body Database: all near-Earth asteroids down to ~25 m, every body larger than 12 km out to Jupiter, and every asteroid with a measured spectral type. Catalogue refreshed hourly by a GitHub Action. Positions are recomputed every second in your browser, so the map shows where everything is right now.</li>
+<li><b>Orbits</b> — NASA/JPL Small-Body Database: all near-Earth asteroids down to ~25 m, every body larger than 12 km out to ~11 AU (Saturn), the brighter Jupiter Trojans and the Centaurs, and every asteroid with a measured spectral type. Catalogue refreshed hourly by a GitHub Action. Positions are recomputed every second in your browser, so the map shows where everything is right now.</li>
+<li><b>Comets</b> (optional layer) — short-period comets (Jupiter-family, Encke-, Chiron- and Halley-type) from the same database; composition from Rosetta’s measurements of comet 67P (~30% water ice). Diameters are often unknown, so many are assumed at 2 km. Ranked against the asteroid tiers, so turning them on never re-ranks asteroids.</li>
 <li><b>Close approaches</b> — JPL Close-Approach API, next 120 days. Flagged as launch windows.</li>
 <li><b>Prices</b> — Au/Ag/Pt/Pd/Cu refresh every minute in your browser (gold-api.com); Rh/Ir/Ru are checked hourly (Umicore publishes once per business day); the rest are reference values.</li>
 </ul>

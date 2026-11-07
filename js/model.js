@@ -41,6 +41,9 @@ export const CLASSES = {
   E: { label: 'Enstatite (E-type)', analog: 'Aubrites / enstatite chondrites', density: 3000, albedo: 0.5,
        g: { Fe: .1, Ni: .006, Co: 3e-4, Cu: 1e-4, Pt: .6*ppm, Pd: .4*ppm, Rh: .1*ppm, Ir: .3*ppm, Ru: .4*ppm, Os: .3*ppm, Au: .1*ppm, water: 0 },
        p: { metal: .5, pgm: .3, water: .02 } },
+  K: { label: 'Comet nucleus', analog: 'Rosetta / 67P measurements', density: 550, albedo: 0.04,
+       g: { Fe: .08, Ni: .005, Co: 2.5e-4, Cu: 5e-5, Pt: .4*ppm, Pd: .25*ppm, Rh: .06*ppm, Ir: .2*ppm, Ru: .3*ppm, Os: .22*ppm, Au: .07*ppm, water: .3 },
+       p: { metal: .4, pgm: .35, water: .95 } },
   V: { label: 'Basaltic (V-type)', analog: 'HED meteorites (Vesta)', density: 3000, albedo: 0.35,
        g: { Fe: .14, Ni: 2e-5, Co: 2e-5, Cu: 1e-5, Pt: .01*ppm, Pd: .01*ppm, Rh: .002*ppm, Ir: .005*ppm, Ru: .01*ppm, Os: .005*ppm, Au: .005*ppm, water: 0 },
        p: { metal: .3, pgm: .15, water: .02 } },
@@ -56,6 +59,7 @@ export const TIERS = [
 ];
 
 function classify(o) {
+  if (o.comet) return { cls: 'K', conf: 0.8, basis: `Comet (${o.class || 'short-period'})` };
   const t = (o.spec_B || o.spec_T || '').trim();
   if (t) {
     const s = t.replace(/[^A-Za-z]/g, '');
@@ -77,6 +81,7 @@ function classify(o) {
     if (p < 0.3) return { cls: 'S', conf: 0.5, basis: `Albedo ${p.toFixed(3)} (moderate)` };
     return { cls: 'E', conf: 0.35, basis: `Albedo ${p.toFixed(3)} (bright)` };
   }
+  if (o.a > 4.5) return { cls: 'D', conf: 0.3, basis: 'No spectra – Trojan/Centaur statistics' };
   if (o.a > 3.0) return { cls: 'C', conf: 0.25, basis: 'No spectra – outer-belt statistics' };
   if (o.a > 2.6) return { cls: 'C', conf: 0.2, basis: 'No spectra – mid-belt statistics' };
   return { cls: 'S', conf: 0.25, basis: 'No spectra – inner/NEO statistics' };
@@ -103,7 +108,7 @@ function deltaV(a, e, incDeg) {
   const leo = Math.sqrt(vinf * vinf + 10.85 ** 2) - 7.67;
   // from low lunar orbit: 1.40 km/s to Earth-Moon escape (C3=0), plus hyperbolic excess
   const moon = 1.40 + Math.sqrt(vinf * vinf + 1.44 ** 2) - 1.44;
-  const transferYr = Math.min(3, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
+  const transferYr = Math.min(8, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
   return { vinf, dvArr, leo, moon, ret: dvArr + 0.3, transferYr };
 }
 
@@ -113,7 +118,7 @@ export function prepare(row, F) {
   const C = CLASSES[c.cls];
   const albedo = o.albedo ?? C.albedo;
   const dEst = o.diameter == null;
-  const D = o.diameter ?? (o.H != null ? 1329 / Math.sqrt(albedo) * Math.pow(10, -o.H / 5) : 0.1);
+  const D = o.diameter ?? (o.H != null ? 1329 / Math.sqrt(albedo) * Math.pow(10, -o.H / 5) : (o.comet ? 2 : 0.1));
   const mass = C.density * Math.PI / 6 * Math.pow(D * 1000, 3); // kg
   const dv = deltaV(o.a, o.e, o.i);
   return { ...o, ...c, D, dEst, mass, dv, q: o.a * (1 - o.e), Q: o.a * (1 + o.e) };
@@ -181,13 +186,23 @@ export function evaluate(o, S, prices) {
   };
 }
 
-export function assignTiers(objs) {
+export function assignTiers(objs, extra = []) {
+  // Tiers are percentiles of the asteroid population; optional layers (comets)
+  // are slotted in by profit so toggling them never re-ranks the asteroids.
   const sorted = [...objs].sort((a, b) => b.ev.profit - a.ev.profit);
   const n = sorted.length;
+  const floor = {};
   sorted.forEach((o, r) => {
     const f = (r + 1) / n;
     o.tier = TIERS.find(t => f <= t.top);
     o.rank = r + 1;
+    floor[o.tier.key] = o.ev.profit;
   });
-  return sorted;
+  for (const o of extra) {
+    o.tier = TIERS.find(t => floor[t.key] !== undefined && o.ev.profit >= floor[t.key]) || TIERS[TIERS.length - 1];
+    let lo = 0, hi = n;  // rank = position among asteroids
+    while (lo < hi) { const m = (lo + hi) >> 1; sorted[m].ev.profit > o.ev.profit ? lo = m + 1 : hi = m; }
+    o.rank = lo + 1;
+  }
+  return [...sorted, ...extra].sort((a, b) => b.ev.profit - a.ev.profit);
 }

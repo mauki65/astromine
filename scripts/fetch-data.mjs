@@ -30,11 +30,14 @@ async function asteroids() {
   const sets = await Promise.all([
     // Near-Earth asteroids down to ~25 m (H<=25.5)
     sbdb({ 'sb-group': 'neo', 'sb-cdata': JSON.stringify({ AND: ['H|LE|25.5'] }) }),
-    // Big bodies Venus..Jupiter
-    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|5.6', 'diameter|GT|12'] }) }),
+    // Big bodies Venus..Saturn (~11 AU)
+    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|11', 'diameter|GT|12'] }) }),
     // Anything with a measured spectral type (composition evidence)
-    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|5.6', 'spec_B|DF'] }) }),
-    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|5.6', 'spec_T|DF'] }) }),
+    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|11', 'spec_B|DF'] }) }),
+    sbdb({ 'sb-cdata': JSON.stringify({ AND: ['a|LT|11', 'spec_T|DF'] }) }),
+    // Jupiter Trojans (L4/L5) brighter than H 15.5 (~>10 km), and Centaurs
+    sbdb({ 'sb-class': 'TJN', 'sb-cdata': JSON.stringify({ AND: ['H|LE|15.5'] }) }).catch(e => (console.warn('TJN', e.message), [])),
+    sbdb({ 'sb-class': 'CEN', 'sb-cdata': JSON.stringify({ AND: ['a|LT|11'] }) }).catch(e => (console.warn('CEN', e.message), [])),
   ]);
   const seen = new Map();
   for (const rows of sets) for (const r of rows) {
@@ -56,6 +59,38 @@ async function asteroids() {
     rows,
   }));
   console.log(`asteroids.json: ${rows.length} objects`);
+}
+
+// ---------- Short-period comets (Jupiter-family, Encke, Chiron, Halley types) ----------
+async function comets() {
+  const q = new URLSearchParams({
+    fields: 'full_name,q,e,i,om,w,tp,epoch,M2,diameter,albedo,class,moid',
+    'sb-kind': 'c', 'sb-class': 'JFc,ETc,CTc,HTC',
+  });
+  const j = await getJSON(`${SBDB}?${q}`);
+  console.log(`comets -> ${j.count}`);
+  const seen = new Map();
+  for (const r of j.data || []) {
+    const name = (r[0] || '').trim(), qq = +r[1], e = +r[2];
+    if (!name || !(qq > 0) || !(e < 0.99)) continue;
+    const a = qq / (1 - e);
+    if (a > 30) continue;
+    const epoch = +r[7] || +r[6], tp = +r[6];
+    const ma = ((0.9856076686 / Math.pow(a, 1.5)) * (epoch - tp)) % 360;
+    // keep only the latest apparition per designation (names repeat across fits)
+    const key = name.replace(/-[A-Z]$/, '');
+    if (seen.has(key)) continue;
+    seen.set(key, [name, r6(a), r6(e), r6(r[3]), r6(r[4]), r6(r[5]), r6((ma + 360) % 360), r6(epoch),
+      r6(r[8]), r6(r[9]), r6(r[10]), null, null, qq < 1.3 ? 1 : 0, 0, r[11] || null, r6(r[12]), 1]);
+  }
+  const rows = [...seen.values()];
+  await writeFile(new URL('comets.json', DATA), JSON.stringify({
+    generated: new Date().toISOString(),
+    source: 'NASA/JPL Small-Body Database – short-period comets',
+    fields: ['name', 'a', 'e', 'i', 'om', 'w', 'ma', 'epoch', 'H', 'diameter', 'albedo', 'spec_B', 'spec_T', 'neo', 'pha', 'class', 'moid', 'comet'],
+    rows,
+  }));
+  console.log(`comets.json: ${rows.length}`);
 }
 
 // ---------- Close approaches (next 120 days, < 0.05 AU) ----------
@@ -103,6 +138,6 @@ async function prices() {
   console.log('prices.json updated');
 }
 
-const results = await Promise.allSettled([asteroids(), closeApproaches(), prices()]);
+const results = await Promise.allSettled([asteroids(), closeApproaches(), prices(), comets()]);
 for (const r of results) if (r.status === 'rejected') console.error(r.reason);
 if (results[0].status === 'rejected') process.exit(1);
