@@ -1,19 +1,71 @@
 {
-  "generated": "2026-11-07T16:00:00Z",
+  "generated": "2026-11-07T16:27:21.727Z",
   "note": "usdPerKg values are auto-updated daily by the GitHub Action where a free source exists; Au/Ag/Pt/Pd/Cu are also refreshed live in the browser. Entries marked 'reference' have no free live feed - edit here or override in the app.",
   "metals": {
-    "Au":    { "usdPerKg": 130295,  "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Ag":    { "usdPerKg": 1675,    "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Pt":    { "usdPerKg": 49512,   "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Pd":    { "usdPerKg": 33405,   "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Rh":    { "usdPerKg": 295787,  "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Ir":    { "usdPerKg": 323115,  "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Ru":    { "usdPerKg": 62694,   "source": "Umicore daily price", "asOf": "2026-11-06" },
-    "Os":    { "usdPerKg": 12860,   "source": "reference (no exchange market, ~$400/ozt dealer price)", "asOf": "2026-11" },
-    "Cu":    { "usdPerKg": 14.0,    "source": "gold-api.com spot (COMEX HG)", "asOf": "2026-11-07" },
-    "Ni":    { "usdPerKg": 15.675,  "source": "reference (LME 3-month, 4 Nov 2026)", "asOf": "2026-11-04" },
-    "Co":    { "usdPerKg": 48.0,    "source": "reference (refined cobalt, estimate)", "asOf": "2026-11" },
-    "Fe":    { "usdPerKg": 0.45,    "source": "reference (pig iron, Earth market)", "asOf": "2026-11" },
-    "water": { "usdPerKg": 1000,    "source": "assumption: value of propellant water delivered in cislunar space (no market yet)", "asOf": "2026-11" }
+    "Au": {
+      "usdPerKg": 130921,
+      "source": "gold-api.com spot",
+      "asOf": "2026-11-07T16:27:07Z"
+    },
+    "Ag": {
+      "usdPerKg": 1674.12,
+      "source": "gold-api.com spot",
+      "asOf": "2026-11-07T16:27:06Z"
+    },
+    "Pt": {
+      "usdPerKg": 49640.8,
+      "source": "gold-api.com spot",
+      "asOf": "2026-11-07T16:27:10Z"
+    },
+    "Pd": {
+      "usdPerKg": 33565.4,
+      "source": "gold-api.com spot",
+      "asOf": "2026-11-07T16:27:08Z"
+    },
+    "Rh": {
+      "usdPerKg": 295787,
+      "source": "Umicore daily price",
+      "asOf": "2026-11-07T16:27:21.727Z"
+    },
+    "Ir": {
+      "usdPerKg": 323115,
+      "source": "Umicore daily price",
+      "asOf": "2026-11-07T16:27:21.727Z"
+    },
+    "Ru": {
+      "usdPerKg": 62694,
+      "source": "Umicore daily price",
+      "asOf": "2026-11-07T16:27:21.727Z"
+    },
+    "Os": {
+      "usdPerKg": 12860,
+      "source": "reference (no exchange market, ~$400/ozt dealer price)",
+      "asOf": "2026-11"
+    },
+    "Cu": {
+      "usdPerKg": 14.0027,
+      "source": "gold-api.com spot",
+      "asOf": "2026-11-07T16:27:09Z"
+    },
+    "Ni": {
+      "usdPerKg": 15.675,
+      "source": "reference (LME 3-month, 4 Nov 2026)",
+      "asOf": "2026-11-04"
+    },
+    "Co": {
+      "usdPerKg": 48,
+      "source": "reference (refined cobalt, estimate)",
+      "asOf": "2026-11"
+    },
+    "Fe": {
+      "usdPerKg": 0.45,
+      "source": "reference (pig iron, Earth market)",
+      "asOf": "2026-11"
+    },
+    "water": {
+      "usdPerKg": 1000,
+      "source": "assumption: value of propellant water delivered in cislunar space (no market yet)",
+      "asOf": "2026-11"
+    }
   }
 }
