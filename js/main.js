@@ -13,7 +13,7 @@ const store = {
 const S = { ...DEFAULTS, ...store.get('settings', {}) };
 delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
 const st = {
-  jd: jdNow(), playing: false, speed: 30, frame: store.get('frame', 'earth'),
+  jd: jdNow(), live: true, playing: false, speed: 30, frame: store.get('frame', 'earth'),
   view: { cx: 0, cy: 0, scale: 1 }, sel: null, hover: null,
   tiers: new Set(TIERS.map(t => t.key)), group: 'all', onlyProfit: false, query: '',
 };
@@ -304,12 +304,18 @@ function tick(t) {
   st.jd += dt * st.speed; propagate(); updateDate();
   requestAnimationFrame(tick);
 }
-$('#play').onclick = () => { st.playing = !st.playing; $('#play').textContent = st.playing ? '❚❚' : '▶'; last = 0; if (st.playing) requestAnimationFrame(tick); };
+$('#play').onclick = () => { st.playing = !st.playing; if (st.playing) st.live = false; $('#play').textContent = st.playing ? '❚❚' : '▶'; last = 0; if (st.playing) requestAnimationFrame(tick); };
 $('#speed').onchange = e => st.speed = +e.target.value;
-$('#now').onclick = () => { st.jd = jdNow(); propagate(); updateDate(); };
+$('#now').onclick = () => { st.live = true; st.playing = false; $('#play').textContent = '▶'; st.jd = jdNow(); propagate(); updateDate(); };
+setInterval(() => { if (st.live && !st.playing && objs.length) { st.jd = jdNow(); propagate(); updateDate(); } }, 1000);
+setInterval(async () => {  // pick up new catalogue/price commits from the hourly Action
+  try { const j = await fetch('data/prices.json', { cache: 'no-store' }).then(r => r.json());
+    let ch = false; for (const [k, m] of Object.entries(j.metals || {})) if (!priceMeta[k]?.live && priceMeta[k]?.usdPerKg !== m.usdPerKg) { priceMeta[k] = m; ch = true; }
+    if (ch) recompute(); } catch {}
+}, 300000);
 function updateDate() {
   const d = new Date((st.jd - 2440587.5) * 86400000);
-  $('#date').textContent = d.toISOString().slice(0, 10);
+  $('#date').innerHTML = st.live && !st.playing ? '<span class="live"></span>' + d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC' : d.toISOString().slice(0, 10);
 }
 segment('#frame', st.frame, v => { st.frame = v; store.set('frame', v); fit(); draw(); });
 
@@ -484,7 +490,7 @@ function renderMaterials() {
       const n = objs.filter(o => o.cls === c).length;
       return `<tr><td><b>${C.label}</b></td><td class="muted">${C.analog}</td><td class="num">${money(all)}</td><td class="num">${money(pgm)}</td><td class="num">${money((C.g.water || 0) * 1000 * (prices.water || 0))}</td><td class="num">${n.toLocaleString()}</td></tr>`;
     }).join('') + '</tbody>';
-  $('#mat-status').innerHTML = `Gold, silver, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium update daily from Umicore. Others are reference values — override them to run your own scenario.`;
+  $('#mat-status').innerHTML = `Gold, silver, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium are checked hourly against Umicore (published once per business day). Others are reference values — override them to run your own scenario.`;
 }
 
 // ---------- status ----------
@@ -506,9 +512,9 @@ $('#about').innerHTML = `
 <p>You run a space-mining company. Every dot is a real asteroid tracked by NASA/JPL, placed where it actually is today. Your job: pick the ones that make money and skip the ones that don’t.</p>
 <h2>Data</h2>
 <ul>
-<li><b>Orbits</b> — NASA/JPL Small-Body Database: all near-Earth asteroids down to ~25 m, every body larger than 12 km out to Jupiter, and every asteroid with a measured spectral type. Refreshed twice a day by a GitHub Action. Positions are propagated live in your browser from the orbital elements.</li>
+<li><b>Orbits</b> — NASA/JPL Small-Body Database: all near-Earth asteroids down to ~25 m, every body larger than 12 km out to Jupiter, and every asteroid with a measured spectral type. Catalogue refreshed hourly by a GitHub Action. Positions are recomputed every second in your browser, so the map shows where everything is right now.</li>
 <li><b>Close approaches</b> — JPL Close-Approach API, next 120 days. Flagged as launch windows.</li>
-<li><b>Prices</b> — live spot (gold-api.com) for Au/Ag/Pt/Pd/Cu, daily Umicore prices for Rh/Ir/Ru, reference values for the rest.</li>
+<li><b>Prices</b> — Au/Ag/Pt/Pd/Cu refresh every minute in your browser (gold-api.com); Rh/Ir/Ru are checked hourly (Umicore publishes once per business day); the rest are reference values.</li>
 </ul>
 <h2>Composition</h2>
 <p>Nobody has assayed these asteroids. Composition comes from the spectral class (or, failing that, the albedo or orbit) mapped to meteorite analogues: metallic asteroids ≈ iron meteorites (~90% iron-nickel, 10–50 ppm platinum-group metals), stony ≈ ordinary chondrites, carbonaceous ≈ CI/CM chondrites (up to ~10–20% water). Each material gets a <i>chance</i> that reflects how sure we are of the class.</p>

@@ -5,13 +5,13 @@ Interactive prospecting map of real asteroids between Venus and Jupiter, ranked 
 ## Data
 | What | Source | Refresh |
 |---|---|---|
-| Orbits, size, albedo, spectral type | NASA/JPL Small-Body Database API | GitHub Action, 2×/day |
-| Earth close approaches (120 d) | NASA/JPL Close-Approach Data API | GitHub Action, 2×/day |
+| Orbits, size, albedo, spectral type | NASA/JPL Small-Body Database API | GitHub Action, hourly |
+| Earth close approaches (120 d) | NASA/JPL Close-Approach Data API | GitHub Action, hourly |
 | Au, Ag, Pt, Pd, Cu | gold-api.com | Live in browser, every 60 s |
-| Rh, Ir, Ru | Umicore daily prices | GitHub Action |
+| Rh, Ir, Ru | Umicore daily prices | GitHub Action, hourly check |
 | Os, Ni, Co, Fe, water | Reference values in `data/prices.json` | Manual / in-app override |
 
-Positions are propagated in the browser from Keplerian elements.
+Positions are recomputed every second in the browser from Keplerian elements.
 
 ## Setup (once)
 1. **Settings → Actions → General → Workflow permissions** → *Read and write*.
