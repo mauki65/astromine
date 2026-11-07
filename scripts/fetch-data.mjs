@@ -124,13 +124,22 @@ async function prices() {
     catch (e) { console.warn('gold-api', sym, e.message); }
   }
 
-  // Umicore daily PGM prices (Rh, Ir, Ru) – scraped from public price page
+  // Umicore daily PGM prices (Rh, Ir, Ru) – scraped from the public price page.
+  // Only accept a number explicitly labelled $/troz and inside a plausible range.
   try {
     const res = await fetch('https://pmm.umicore.com/en/prices/', { headers: UA });
-    const text = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    const text = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ');
     for (const [name, key] of [['Rhodium', 'Rh'], ['Iridium', 'Ir'], ['Ruthenium', 'Ru']]) {
-      const m = text.match(new RegExp(name + '[^0-9]{0,120}?([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]+)?)'));
-      if (m) set(key, parseFloat(m[1].replace(/,/g, '')) / OZT, 'Umicore daily price');
+      let found = null;
+      for (const m of text.matchAll(new RegExp(name, 'g'))) {
+        const win = text.slice(m.index, m.index + 400);
+        const hit = win.match(/([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\s*(?:USD|\$)\s*\/\s*tr?\.?\s*oz/i)
+                 || win.match(/(?:USD|\$)\s*\/\s*tr?\.?\s*oz[^0-9]{0,40}([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)/i);
+        if (hit) { found = parseFloat(hit[1].replace(/,/g, '')); break; }
+      }
+      const [lo, hi] = { Rh: [1000, 60000], Ir: [1000, 60000], Ru: [100, 15000] }[key]; // plausible $/troz
+      if (found >= lo && found <= hi) set(key, found / OZT, 'Umicore daily price');
+      else console.warn('umicore: rejected', key, found);
     }
   } catch (e) { console.warn('umicore', e.message); }
 
