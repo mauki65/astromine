@@ -16,7 +16,7 @@ async function getJSON(url) {
 }
 
 // ---------- Asteroids ----------
-const FIELDS = 'full_name,a,e,i,om,w,ma,epoch,H,diameter,albedo,spec_B,spec_T,neo,pha,class,moid';
+const FIELDS = 'full_name,a,e,i,om,w,ma,epoch,H,diameter,albedo,spec_B,spec_T,neo,pha,class,moid,n_del,n_dop';
 const SBDB = 'https://ssd-api.jpl.nasa.gov/sbdb_query.api';
 
 async function sbdb(params) {
@@ -49,13 +49,14 @@ async function asteroids() {
       name, r6(a), r6(e), r6(r[3]), r6(r[4]), r6(r[5]), r6(r[6]), r6(r[7]),
       r6(r[8]), r6(r[9]), r6(r[10]), r[11] || null, r[12] || null,
       r[13] === 'Y' ? 1 : 0, r[14] === 'Y' ? 1 : 0, r[15] || null, r6(r[16]),
+      (+r[17] || 0) + (+r[18] || 0),  // number of radar delay + Doppler measurements
     ]);
   }
   const rows = [...seen.values()];
   await writeFile(new URL('asteroids.json', DATA), JSON.stringify({
     generated: new Date().toISOString(),
     source: 'NASA/JPL Small-Body Database (ssd-api.jpl.nasa.gov)',
-    fields: ['name', 'a', 'e', 'i', 'om', 'w', 'ma', 'epoch', 'H', 'diameter', 'albedo', 'spec_B', 'spec_T', 'neo', 'pha', 'class', 'moid'],
+    fields: ['name', 'a', 'e', 'i', 'om', 'w', 'ma', 'epoch', 'H', 'diameter', 'albedo', 'spec_B', 'spec_T', 'neo', 'pha', 'class', 'moid', 'radar'],
     rows,
   }));
   console.log(`asteroids.json: ${rows.length} objects`);
@@ -101,7 +102,7 @@ async function nhats() {
     for (const r of j.data || []) {
       const dv = +r.min_dv?.dv, dur = +r.min_dv?.dur;
       if (!(dv > 0)) continue;
-      if (!out[r.des] || dv < out[r.des].dv) out[r.des] = { dv, dur, w: launch, radar: (r.radar_obs_a === 'Y' || r.radar_obs_g === 'Y') ? 1 : 0 };
+      if (!out[r.des] || dv < out[r.des].dv) out[r.des] = { dv, dur, w: launch };
     }
   }
   await writeFile(new URL('nhats.json', DATA), JSON.stringify({

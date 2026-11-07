@@ -154,7 +154,7 @@ export function prepare(row, F) {
 export const DEFAULTS = {
   base: 'earth', costEarth: 500, moonPct: 10, dryMass: 25, buildCost: 150, opsCost: 10,
   isp: 380, oreCap: 500000, returnCap: 400, recovery: 60, procCost: 20, stayMonths: 9, risk: 20,
-  isru: true, impact: true,
+  isru: true, impact: true, launchMode: 'best',
 };
 
 const G0 = 9.80665;

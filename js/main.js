@@ -1,5 +1,5 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, prepare, evaluate, assignTiers, applyNhats } from './model.js';
-import { body, porkchop, depLEO, depMoon } from './lambert.js';
+import { body, porkchop, fixedLaunch, depLEO, depMoon } from './lambert.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
 const $ = s => document.querySelector(s);
@@ -104,7 +104,7 @@ async function load() {
 let rcTimer;
 function recomputeNow() {
   prices = effectivePrices();
-  for (const o of objs) o.ev = evaluate(o, S, prices);
+  for (const o of objs) { o.ev = evaluate(o, S, prices); o.evDate = o.dvDate && S.launchMode === 'date' ? evaluate({ ...o, dv: o.dvDate }, S, prices) : null; }
   ranked = assignTiers(objs.filter(o => !o.comet), objs.filter(o => o.comet));
   renderLegend(); renderList(); if (st.sel) renderDetail(st.sel); draw(); renderMaterials();
 }
@@ -125,6 +125,7 @@ const MAXR = 11; // AU shown
 
 function propagate() {
   pl = planets(st.jd);
+  if (st.sel && st.sel.lam && st.sel.lam.key !== lamKey()) optimise(st.sel, S.launchMode === 'date' ? 150 : (st.playing ? 1e9 : 400));
   for (let k = 0; k < objs.length; k++) {
     const o = objs[k];
     const [x, y] = posAt(o.B, o.M0 + o.B.n * (st.jd - o.epoch));
@@ -341,7 +342,7 @@ function tick(t) {
   st.jd += dt * st.speed; propagate(); updateDate();
   requestAnimationFrame(tick);
 }
-$('#play').onclick = () => { st.playing = !st.playing; if (st.playing) st.live = false; $('#play').textContent = st.playing ? '❚❚' : '▶'; last = 0; if (st.playing) requestAnimationFrame(tick); };
+$('#play').onclick = () => { st.playing = !st.playing; if (st.playing) st.live = false; if (!st.playing && st.sel) optimise(st.sel, 100); $('#play').textContent = st.playing ? '❚❚' : '▶'; last = 0; if (st.playing) requestAnimationFrame(tick); };
 $('#speed').onchange = e => st.speed = +e.target.value;
 $('#now').onclick = () => { st.live = true; st.playing = false; $('#play').textContent = '▶'; st.jd = jdNow(); propagate(); updateDate(); };
 setInterval(() => { if (st.live && !st.playing && objs.length) { st.jd = jdNow(); propagate(); updateDate(); } }, 1000);
@@ -389,9 +390,10 @@ function renderSettings() {
     store.set('settings', S); recompute();
   });
 }
-segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSettings(); recompute(); });
-function resetLambert() { for (const o of objs) if (o.lam) { o.dv = { ...o.dvBase }; o.lam = null; } if (st.sel) optimise(st.sel); }
-$('#reset').onclick = () => { Object.assign(S, DEFAULTS); store.set('settings', S); segment('#base', S.base); renderSettings(); recompute(); };
+segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSettings(); recompute(); resetLambert(); });
+segment('#launch', S.launchMode, v => { S.launchMode = v; store.set('settings', S); resetLambert(); });
+function resetLambert() { for (const o of objs) if (o.lam || o.dvDate) { o.dv = { ...o.dvBase }; o.dvDate = null; o.lam = null; } if (st.sel) optimise(st.sel); recompute(); }
+$('#reset').onclick = () => { Object.assign(S, DEFAULTS); store.set('settings', S); segment('#base', S.base); segment('#launch', S.launchMode); resetLambert(); renderSettings(); recompute(); };
 $('#collapse-left').onclick = () => { const p = $('#mission'); p.classList.toggle('collapsed'); $('#collapse-left').textContent = p.classList.contains('collapsed') ? '+' : '–'; };
 
 function segment(sel, val, cb) {
@@ -448,34 +450,45 @@ function select(o) {
   if (o) { renderDetail(o); optimise(o); }
   draw();
 }
-// Exact Lambert round trip for the selected object (runs once per object/settings).
-function optimise(o) {
-  if (o.lam || o.lamBusy || o.Q > 6 || o.comet && o.a > 8) return;
-  o.lamBusy = true;
-  const box = $('#lam'); if (box) box.textContent = 'Optimising trajectory over the next 10 years…';
-  setTimeout(() => {
-    const jd = jdNow(), pe = planetElements('Earth', jd);
+// Exact Lambert round trip for the selected object. Searches from the map date, so moving
+// the clock changes the result: either the best window ahead, or a launch on that exact day.
+let lamTimer = 0, lamPending = false;
+function lamKey() { return `${S.launchMode}|${S.base}|${S.stayMonths}|${S.launchMode === 'date' ? Math.round(st.jd) : Math.floor(st.jd / 20)}`; }
+function optimise(o, delay = 30) {
+  if (!o || o.Q > 6 || (o.comet && o.a > 8)) return;
+  if (o.lam && o.lam.key === lamKey()) return;
+  if (lamPending && S.launchMode === 'date' && delay < 1e6) return;  // throttle while the clock runs
+  clearTimeout(lamTimer); lamPending = true;
+  o.lamBusy = !(o.lam && o.lam.mode === S.launchMode && S.launchMode === 'date');  // keep last result on screen while the clock runs
+  const box = $('#lam'); if (box) box.innerHTML = lamText(o);
+  lamTimer = setTimeout(() => {
+    lamPending = false;
+    if (st.sel !== o) { o.lamBusy = false; return; }
+    const jd = st.jd, pe = planetElements('Earth', jd), key = lamKey();
     const earth = body(pe.a, pe.e, pe.i, pe.om, pe.w, pe.M, jd);
     const ast = body(o.a, o.e, o.i, o.om, o.w, o.M0 + o.B.n * (jd - o.epoch), jd);
-    const r = porkchop(earth, ast, jd, { stayDays: S.stayMonths * 30.44, step: 10 });
+    const opt = { stayDays: S.stayMonths * 30.44, base: S.base };
+    const r = S.launchMode === 'date' ? fixedLaunch(earth, ast, jd, opt) : porkchop(earth, ast, jd, { ...opt, step: 10 });
     o.lamBusy = false;
-    o.lam = r || { none: true };
-    if (r) Object.assign(o.dv, { leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert' });
+    o.lam = r ? { ...r, key, mode: S.launchMode } : { none: true, key };
+    const dv = r ? { ...o.dvBase, leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert' } : null;
+    // best window feeds the ranking; a fixed launch date is shown for this object only
+    if (S.launchMode === 'date') o.dvDate = dv; else { o.dvDate = null; o.dv = dv || { ...o.dvBase }; }
     recompute();
-  }, 30);
+  }, delay);
 }
 function lamText(o) {
   const d = o.dv;
-  if (o.lam?.tof) { const r = o.lam; return `<b>Lambert-optimised mission</b> — launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth (v∞) ${r.vEntry.toFixed(1)} km/s, captured by atmosphere.${d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : ''}`; }
-  if (o.lam?.none) return 'No round trip under 9 km/s departure found in the next 10 years. Showing the estimate.';
-  if (o.lamBusy) return 'Optimising trajectory over the next 10 years…';
-  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}).${d.nhats.radar ? ' Radar-observed.' : ''}`;
+  if (o.lamBusy) return S.launchMode === 'date' ? `Computing a launch on ${jdDate(st.jd)}…` : `Searching launch windows from ${jdDate(st.jd)} (10 years)…`;
+  if (o.lam?.tof) { const r = o.lam; return `<b>${r.mode === 'date' ? 'Launch on map date' : 'Best launch window'}</b> (Lambert-optimised, ${r.total.toFixed(2)} km/s total) — launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth (v∞) ${r.vEntry.toFixed(1)} km/s, captured by atmosphere.${d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : ''}`; }
+  if (o.lam?.none) return 'No round trip under 9 km/s departure found in the 10 years after the map date. Showing the estimate.';
+  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}).`;
   if (o.Q > 6 || o.comet) return 'Δv is a Hohmann-transfer <b>estimate</b> (too far for the in-browser optimiser).';
   return 'Δv is a Hohmann-transfer <b>estimate</b>.';
 }
 const jdDate = jd => new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
 function renderDetail(o) {
-  const ev = o.ev, T = o.tier, el = $('#detail');
+  const ev = o.evDate || o.ev, T = o.tier, el = $('#detail');
   el.style.setProperty('--tier', T.color);
   const conf = Math.round(o.conf * 100);
   const maxV = Math.max(...ev.items.map(i => i.value), 1);
@@ -484,7 +497,7 @@ function renderDetail(o) {
   el.innerHTML = `
   <div class="dh">
     <div class="row"><div><h2>${esc(shortName(o.name))}</h2>
-      <span class="badge">${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
+      <span class="badge" title="Rank uses the best launch window">${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
       <button class="icon" id="close" title="Close">✕</button></div>
   </div>
   <div class="db">
@@ -496,7 +509,7 @@ function renderDetail(o) {
     <div class="kv">
       <span>Type</span><span>${CLASSES[o.cls].label}</span>
       <span>Evidence</span><span>${esc(o.basis)}</span>
-      <span>Data quality</span><span><span class="ev" style="--c:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].note}">${EVIDENCE[o.evidence].label}</span></span>
+      <span>Data quality</span><span><span class="ev" style="--c:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].note}">${EVIDENCE[o.evidence].label}</span>${o.radar ? ' <span class="ev" style="--c:#6fc3df" title="Shape, size and spin measured by Goldstone/Arecibo radar">Radar</span>' : ''}</span>
       <span>Confidence</span><span>${conf} %</span>
       <span>Meteorite analogue</span><span>${CLASSES[o.cls].analog}</span>
     </div>
@@ -520,6 +533,7 @@ function renderDetail(o) {
       <span>Δv to return</span><span>${ev.dvRet.toFixed(2)} km/s</span>
       <span>${o.lam?.tof ? 'Trip out / back' : 'One-way trip'}</span><span>${o.lam?.tof ? Math.round(o.lam.tof) + ' d / ' + Math.round(o.lam.tofRet) + ' d' : (o.dv.transferYr * 12).toFixed(0) + ' months'}</span>
       <span>Diameter</span><span>${o.dEst ? '~' : ''}${dist(o.D)}${o.dEst ? ' (from brightness)' : ' (measured)'}</span>
+      <span>Radar</span><span>${o.radar ? `observed · ${o.radar} measurements` : 'not observed'}</span>
       <span>Total mass</span><span>${mass(o.mass)}</span>
       <span>Orbit a / e / i</span><span>${o.a.toFixed(3)} AU / ${o.e.toFixed(3)} / ${o.i.toFixed(1)}°</span>
       <span>Perihelion – aphelion</span><span>${o.q.toFixed(2)} – ${o.Q.toFixed(2)} AU</span>
@@ -592,6 +606,8 @@ $('#about').innerHTML = `
 <ul>
 <li><b>Data quality badge</b> on every object: <i>Ground truth</i> (visited or sampled by a spacecraft – Ryugu, Bennu, Itokawa, Eros, Vesta, Psyche), <i>Spectrum</i> (telescope classification), <i>Albedo only</i> (type guessed from reflectivity), <i>Assumed</i> (no data – orbit statistics). Most of the catalogue is Assumed; treat those rankings as hypotheses.</li>
 <li><b>Δv</b> has three levels: NASA’s <b>NHATS</b> optimised round trips for ~thousands of accessible near-Earth asteroids (used in the ranking), an exact <b>Lambert-optimised</b> round trip computed in your browser when you open an object (launch dates within 10 years, your stay time, Earth return by atmospheric entry ≤ 12 km/s like NHATS), and a Hohmann <b>estimate</b> (marked ~) for everything else.</li>
+<li><b>Launch date matters.</b> Metal prices are market prices and don’t depend on where planets are, but mission cost does: Earth and the asteroid have to line up. When you open an object, the optimiser searches from the date on the map clock: <i>Best window ahead</i> finds the cheapest launch in the 10 years after that date, <i>Launch on map date</i> prices a launch on exactly that day (press play to watch costs swing as the geometry changes). The list ranking uses each object’s best window.</li>
+<li><b>Radar</b> badge: the asteroid was measured by Goldstone/Arecibo radar (count of delay + Doppler measurements from NASA/JPL), so its size and shape are well known.</li>
 <li>Sizes from brightness can be off by ×2 (mass by ×8). “(measured)” marks diameters from infrared or radar.</li>
 </ul>
 <h2>Composition</h2>

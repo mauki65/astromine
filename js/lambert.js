@@ -109,3 +109,29 @@ export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = '
   }
   return best;
 }
+
+// Cheapest round trip for a departure on exactly day t0 (outbound TOF and return TOF free).
+export function fixedLaunch(earth, ast, t0, { stayDays = 270, base = 'earth' } = {}) {
+  const dep = base === 'moon' ? depMoon : depLEO;
+  const E = stateAt(earth, t0), outs = [];
+  for (let tof = 20; tof <= 900; tof += 5) {
+    const A = stateAt(ast, t0 + tof);
+    const L = lambert(E.r, A.r, tof); if (!L) continue;
+    const vinf = norm(sub(L[0], E.v)) * KMS, arr = norm(sub(A.v, L[1])) * KMS;
+    outs.push({ t0, tof, vinf, d1: dep(vinf), arr });
+  }
+  outs.sort((a, b) => (a.d1 + a.arr) - (b.d1 + b.arr));
+  let best = null;
+  for (const o of outs.slice(0, 25)) {
+    const t1 = o.t0 + o.tof + stayDays, A = stateAt(ast, t1);
+    for (let tof = 30; tof <= 900; tof += 10) {
+      const E2 = stateAt(earth, t1 + tof);
+      const L = lambert(A.r, E2.r, tof); if (!L) continue;
+      const d3 = norm(sub(L[0], A.v)) * KMS, vEntry = norm(sub(L[1], E2.v)) * KMS;
+      const pen = Math.max(0, vEntry - 12);   // braking burn needed above 12 km/s entry
+      const total = o.d1 + o.arr + d3 + pen;
+      if (!best || total < best.total) best = { ...o, tofRet: tof, d3: d3 + pen, vEntry, total, t1, t2: t1 + tof };
+    }
+  }
+  return best;
+}
