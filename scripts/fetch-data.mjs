@@ -9,10 +9,14 @@ await mkdir(DATA, { recursive: true });
 
 const r6 = v => (v === null || v === '' || v === undefined) ? null : +(+v).toPrecision(7);
 
-async function getJSON(url) {
-  const res = await fetch(url, { headers: UA });
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return res.json();
+async function getJSON(url, tries = 3) {
+  for (let k = 1; ; k++) {
+    const res = await fetch(url, { headers: UA }).catch(e => ({ ok: false, status: e.message }));
+    if (res.ok) return res.json();
+    // NASA/JPL APIs occasionally return 502/503 under load: back off and retry
+    if (k >= tries || (typeof res.status === 'number' && res.status < 500)) throw new Error(`${res.status} ${url}`);
+    await new Promise(r => setTimeout(r, 5000 * k));
+  }
 }
 
 // ---------- Asteroids ----------
