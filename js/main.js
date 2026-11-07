@@ -16,7 +16,7 @@ delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
 const st = {
   jd: jdNow(), live: true, playing: false, speed: 30, frame: store.get('frame', 'earth'),
   view: { cx: 0, cy: 0, scale: 1 }, sel: null, hover: null,
-  tiers: new Set(TIERS.map(t => t.key)), comets: store.get('comets', false), group: 'all', onlyProfit: false, query: '',
+  tiers: new Set(TIERS.map(t => t.key)), comets: store.get('comets', false), asteroids: store.get('asteroids', true), group: 'all', onlyProfit: false, query: '',
 };
 let objs = [], ranked = [], prices = {}, priceMeta = {}, overrides = store.get('overrides', {});
 let posX, posY, pl, cad = new Map(), meta = {};
@@ -138,7 +138,7 @@ const origin = () => st.frame === 'earth' && pl ? pl.Earth.pos : [0, 0];
 const toS = (x, y, O) => [W / 2 + (x - O[0] - st.view.cx) * st.view.scale, H / 2 - (y - O[1] - st.view.cy) * st.view.scale];
 
 function visible(o) {
-  if (o.comet && !st.comets) return false;
+  if (o.comet ? !st.comets : !st.asteroids) return false;
   if (!st.tiers.has(o.tier.key)) return false;
   if (st.group === 'neo' && !o.neo) return false;
   if (st.group === 'belt' && o.neo) return false;
@@ -406,11 +406,23 @@ function segment(sel, val, cb) {
 
 // ---------- UI: legend, filters, list ----------
 function renderLegend() {
-  const counts = {}; for (const o of objs) if (!o.comet || st.comets) counts[o.tier.key] = (counts[o.tier.key] || 0) + 1;
-  $('#legend').innerHTML = [...TIERS].map(t => `<button data-t="${t.key}" class="${st.tiers.has(t.key) ? '' : 'off'}"><i style="border-color:${t.color}"></i><b>${t.label}</b><span class="mono">${(counts[t.key] || 0).toLocaleString()}</span></button>`).join('');
+  const counts = {};
+  for (const o of objs) if (o.comet ? st.comets : st.asteroids) counts[o.tier.key] = (counts[o.tier.key] || 0) + 1;
+  const nA = objs.filter(o => !o.comet).length, nC = objs.length - nA;
+  $('#legend').innerHTML = [...TIERS].map(t => `<button data-t="${t.key}" class="${st.tiers.has(t.key) ? '' : 'off'}"><i style="border-color:${t.color}"></i><b>${t.label}</b><span class="mono">${(counts[t.key] || 0).toLocaleString()}</span></button>`).join('') +
+    `<span class="lsep"></span>` +
+    `<button data-k="asteroids" class="${st.asteroids ? '' : 'off'}"><i class="ic-ast"></i><b>Asteroids</b><span class="mono">${nA.toLocaleString()}</span></button>` +
+    `<button data-k="comets" class="${st.comets ? '' : 'off'}"><i class="ic-com"></i><b>Comets</b><span class="mono">${nC.toLocaleString()}</span></button>`;
   $('#legend').querySelectorAll('button').forEach(b => b.onclick = () => {
-    const k = b.dataset.t; st.tiers.has(k) ? st.tiers.delete(k) : st.tiers.add(k); renderLegend(); renderList(); draw();
+    if (b.dataset.k) setLayer(b.dataset.k, !st[b.dataset.k]);
+    else { const k = b.dataset.t; st.tiers.has(k) ? st.tiers.delete(k) : st.tiers.add(k); renderLegend(); renderList(); draw(); }
   });
+}
+function setLayer(k, on) {
+  st[k] = on; store.set(k, on);
+  if (st.sel && !visible(st.sel)) select(null);
+  const cb = $('#show-comets'); if (cb) cb.checked = st.comets;
+  renderLegend(); renderList(); draw();
 }
 const GROUPS = [['all', 'All'], ['neo', 'Near-Earth'], ['belt', 'Belt'], ['metal', 'Metal-rich'], ['water', 'Water-rich']];
 function renderFilters() {
@@ -418,7 +430,7 @@ function renderFilters() {
     `<button class="chip ${st.onlyProfit ? 'on' : ''}" data-p="1">Profitable only</button>` +
     `<div class="evkey">${Object.values(EVIDENCE).map(e => `<span title="${e.note}"><i class="evd" style="background:${e.color}"></i>${e.label}</span>`).join('')}</div>` +
     `<label class="tick"><input type="checkbox" id="show-comets" ${st.comets ? 'checked' : ''}> Show short-period comets <span class="muted">(${objs.filter(o => o.comet).length.toLocaleString()})</span></label>`;
-  $('#show-comets').onchange = e => { st.comets = e.target.checked; store.set('comets', st.comets); if (!st.comets && st.sel?.comet) select(null); renderLegend(); renderList(); draw(); };
+  $('#show-comets').onchange = e => setLayer('comets', e.target.checked);
   $('#filters').querySelectorAll('.chip').forEach(b => b.onclick = () => {
     if (b.dataset.p) st.onlyProfit = !st.onlyProfit; else st.group = b.dataset.g;
     renderFilters(); renderList(); draw();
@@ -430,7 +442,7 @@ function renderList() {
   const q = st.query;
   const list = [];
   for (const o of ranked) {
-    if (o.comet && !st.comets) continue;
+    if (o.comet ? !st.comets : !st.asteroids) continue;
     if (q ? !o.name.toLowerCase().includes(q) : !visible(o)) continue;
     list.push(o); if (list.length >= 60) break;
   }
@@ -509,7 +521,7 @@ function renderDetail(o) {
     <div class="kv">
       <span>Type</span><span>${CLASSES[o.cls].label}</span>
       <span>Evidence</span><span>${esc(o.basis)}</span>
-      <span>Data quality</span><span><span class="ev" style="--c:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].note}">${EVIDENCE[o.evidence].label}</span>${o.radar ? ' <span class="ev" style="--c:#6fc3df" title="Shape, size and spin measured by Goldstone/Arecibo radar">Radar</span>' : ''}</span>
+      <span>Data quality</span><span><span class="ev" style="--c:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].note}">${EVIDENCE[o.evidence].label}</span>${o.radar ? ' <span class="ev" style="--c:#6fc3df" title="Size, shape and spin measured by Goldstone/Arecibo radar">Radar-scanned</span>' : ''}</span>
       <span>Confidence</span><span>${conf} %</span>
       <span>Meteorite analogue</span><span>${CLASSES[o.cls].analog}</span>
     </div>
@@ -604,10 +616,10 @@ $('#about').innerHTML = `
 </ul>
 <h2>How much to trust each number</h2>
 <ul>
-<li><b>Data quality badge</b> on every object: <i>Ground truth</i> (visited or sampled by a spacecraft – Ryugu, Bennu, Itokawa, Eros, Vesta, Psyche), <i>Spectrum</i> (telescope classification), <i>Albedo only</i> (type guessed from reflectivity), <i>Assumed</i> (no data – orbit statistics). Most of the catalogue is Assumed; treat those rankings as hypotheses.</li>
+<li><b>Data quality badge</b> on every object: <i>Confirmed</i> (visited or sampled by a spacecraft – Ryugu, Bennu, Itokawa, Eros, Vesta, Psyche), <i>Measured</i> (composition from a telescope spectrum), <i>Estimated</i> (guessed from how much light it reflects), <i>Guess</i> (no data – typical for that kind of orbit). Most of the catalogue is a Guess; treat those rankings as hypotheses.</li>
 <li><b>Δv</b> has three levels: NASA’s <b>NHATS</b> optimised round trips for ~thousands of accessible near-Earth asteroids (used in the ranking), an exact <b>Lambert-optimised</b> round trip computed in your browser when you open an object (launch dates within 10 years, your stay time, Earth return by atmospheric entry ≤ 12 km/s like NHATS), and a Hohmann <b>estimate</b> (marked ~) for everything else.</li>
 <li><b>Launch date matters.</b> Metal prices are market prices and don’t depend on where planets are, but mission cost does: Earth and the asteroid have to line up. When you open an object, the optimiser searches from the date on the map clock: <i>Best window ahead</i> finds the cheapest launch in the 10 years after that date, <i>Launch on map date</i> prices a launch on exactly that day (press play to watch costs swing as the geometry changes). The list ranking uses each object’s best window.</li>
-<li><b>Radar</b> badge: the asteroid was measured by Goldstone/Arecibo radar (count of delay + Doppler measurements from NASA/JPL), so its size and shape are well known.</li>
+<li><b>Radar-scanned</b> badge: the asteroid was measured by Goldstone/Arecibo radar (count of delay + Doppler measurements from NASA/JPL), so its size and shape are well known.</li>
 <li>Sizes from brightness can be off by ×2 (mass by ×8). “(measured)” marks diameters from infrared or radar.</li>
 </ul>
 <h2>Composition</h2>

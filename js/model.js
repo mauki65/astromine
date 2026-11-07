@@ -68,10 +68,10 @@ const GROUND_TRUTH = {
   '16':     { cls: 'M', basis: 'Spectra + radar: metal-rich; NASA Psyche mission arrives 2029' },
 };
 export const EVIDENCE = {
-  sample:   { label: 'Ground truth',  color: '#3fcf6e', note: 'Measured by a spacecraft or returned sample' },
-  measured: { label: 'Spectrum',      color: '#3a8bff', note: 'Telescope spectrum classifies the surface' },
-  inferred: { label: 'Albedo only',   color: '#e9c46a', note: 'Type guessed from brightness (reflectivity)' },
-  assumed:  { label: 'Assumed',       color: '#8a909c', note: 'No data – population statistics for this orbit' },
+  sample:   { label: 'Confirmed',  color: '#3fcf6e', note: 'Visited by a spacecraft or sample brought back to Earth' },
+  measured: { label: 'Measured',   color: '#3a8bff', note: 'Composition measured by telescope (light spectrum)' },
+  inferred: { label: 'Estimated',  color: '#e9c46a', note: 'Estimated from how much light it reflects' },
+  assumed:  { label: 'Guess',      color: '#8a909c', note: 'No data – typical for asteroids on this kind of orbit' },
 };
 function classify(o) {
   const num = (o.name || '').match(/^(\d+)\s/)?.[1];
