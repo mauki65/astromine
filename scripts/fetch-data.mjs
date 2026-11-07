@@ -16,7 +16,7 @@ async function getJSON(url) {
 }
 
 // ---------- Asteroids ----------
-const FIELDS = 'full_name,a,e,i,om,w,ma,epoch,H,diameter,albedo,spec_B,spec_T,neo,pha,class,moid,n_del,n_dop';
+const FIELDS = 'full_name,a,e,i,om,w,ma,epoch,H,diameter,albedo,spec_B,spec_T,neo,pha,class,moid,n_del_obs_used,n_dop_obs_used';
 const SBDB = 'https://ssd-api.jpl.nasa.gov/sbdb_query.api';
 
 async function sbdb(params) {
