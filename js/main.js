@@ -95,6 +95,12 @@ async function load() {
   if (com) objs.push(...com.rows.map(mk(com.fields)));
   posX = new Float32Array(objs.length); posY = new Float32Array(objs.length);
   recomputeNow(); renderFilters();
+  // deep link: ?obj=Bennu opens that object (used by the report page)
+  const want = new URLSearchParams(location.search).get('obj');
+  if (want) {
+    const w = want.toLowerCase(), hit = objs.find(o => shortName(o.name).toLowerCase() === w) || objs.find(o => o.name.toLowerCase().includes(w));
+    if (hit) { if (hit.comet && !st.comets) setLayer('comets', true); setTimeout(() => { select(hit); focus(hit); }, 50); }
+  }
   fit();
   propagate();
   refreshLive();

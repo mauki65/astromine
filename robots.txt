@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://mauki65.github.io/astromine/sitemap.xml

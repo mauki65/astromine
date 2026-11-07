@@ -145,3 +145,11 @@ h3{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)
 .legend .lsep{height:1px;background:var(--line2);margin:4px 0}
 .legend i.ic-ast{border-color:#9aa0ab}
 .legend i.ic-com{border-radius:1px;transform:rotate(45deg) scale(.85);border-color:#6fc3df}
+.tabs a.tabl{padding:6px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:13px}
+.tabs a.tabl:hover{color:var(--text)} .tabs a.tabl.on{color:var(--text);background:#151821}
+.disclaimer{position:absolute;right:12px;bottom:14px;font-size:10px;color:var(--dim);pointer-events:none;max-width:260px;text-align:right}
+@media (max-width:1300px){.disclaimer{display:none}}
+@media (max-width:860px){
+  .brand{font-size:0;gap:0} .top{gap:10px;padding:0 12px} .tabs button,.tabs a.tabl{padding:6px 8px;font-size:12.5px}
+  .panel.right{bottom:112px}
+}

@@ -1,28 +1,33 @@
-# Astromine
+# Astromine — which asteroids are worth mining?
 
-Interactive prospecting map of real asteroids between Venus and Jupiter, ranked Common → Legendary by mission profit using live metal prices.
+**Live:** https://mauki65.github.io/astromine/ · **Monthly-style report (auto-updated):** https://mauki65.github.io/astromine/report/
 
-## Data
-| What | Source | Refresh |
+![Astromine map](assets/screenshot.png)
+
+An interactive map of 50,000+ real asteroids and comets from Venus to Saturn, ranked **Common → Uncommon → Rare → Epic → Legendary → Mythic** by expected profit per mining mission. Plug in your own launch costs, spacecraft and risk, launch from Earth or the Moon, and watch the whole solar system re-rank.
+
+## What's real
+| | Source | Refresh |
 |---|---|---|
-| Orbits, size, albedo, spectral type | NASA/JPL Small-Body Database API | GitHub Action, hourly |
-| Earth close approaches (120 d) | NASA/JPL Close-Approach Data API | GitHub Action, hourly |
-| Au, Ag, Pt, Pd, Cu | gold-api.com | Live in browser, every 60 s |
-| Rh, Ir, Ru | Umicore daily prices | GitHub Action, hourly check |
-| Os, Ni, Co, Fe, water | Reference values in `data/prices.json` | Manual / in-app override |
+| Orbits, sizes, spectral types, radar measurements | NASA/JPL Small-Body Database | hourly |
+| Optimised round-trip Δv for ~6,000 near-Earth asteroids | NASA/JPL NHATS | hourly |
+| Earth close approaches | NASA/JPL Close-Approach Data | hourly |
+| Au, Ag, Pt, Pd, Cu prices | gold-api.com | every minute in the browser |
+| Rh, Ir, Ru prices | Umicore | hourly check (published daily) |
+| Exact launch windows | Lambert solver, in the browser | when you open an object |
 
-Positions are recomputed every second in the browser from Keplerian elements.
+Positions are recomputed every second from Keplerian elements.
 
-## Setup (once)
-1. **Settings → Actions → General → Workflow permissions** → *Read and write*.
-2. **Actions → Update space data → Run workflow** (fills `data/asteroids.json`).
-3. **Settings → Pages** → Source: *Deploy from a branch*, `main` / root.
+## What's estimated
+Composition comes from asteroid type → meteorite analogues (only Ryugu, Bennu, Itokawa, Eros, Vesta and Psyche have been visited). Every object carries a data-quality badge: **Confirmed**, **Measured**, **Estimated** or **Guess**. Sizes from brightness can be off by ×2. This is an exploration tool, not investment advice.
 
-## Local
+## How it runs
+Static site on GitHub Pages. A GitHub Action (`.github/workflows/update-data.yml`) runs `scripts/fetch-data.mjs` and `scripts/report.mjs` every hour and commits the results to `data/` and `report/`. No servers, no API keys.
+
 ```
-node scripts/fetch-data.mjs   # Node 20+
+node scripts/fetch-data.mjs && node scripts/report.mjs   # Node 20+
 python3 -m http.server
 ```
 
-## Model
-Composition from spectral class → meteorite analogues; Δv via patched conics from LEO or lunar surface; rocket equation; optional ISRU return fuel; market-impact pricing; failure risk. Estimates, not investment advice.
+## Licence
+MIT

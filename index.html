@@ -4,7 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Astromine — Asteroid Prospecting Map</title>
-<meta name="description" content="Interactive map of real asteroids between Venus and Jupiter, ranked by mining profit with live metal prices.">
+<meta name="description" content="Live map of 50,000+ real asteroids and comets ranked by mining profit — NASA/JPL orbits, NASA NHATS trajectories and live metal prices.">
+<link rel="canonical" href="https://mauki65.github.io/astromine/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Astromine — which asteroids are worth mining?">
+<meta property="og:description" content="Live map of 50,000+ real asteroids ranked Common → Mythic by mining profit. NASA data, real trajectories, live metal prices.">
+<meta property="og:image" content="https://mauki65.github.io/astromine/assets/og.png">
+<meta property="og:url" content="https://mauki65.github.io/astromine/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#06070a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
@@ -17,6 +25,7 @@
     <button data-tab="map" class="on">Map</button>
     <button data-tab="materials">Materials</button>
     <button data-tab="about">How it works</button>
+    <a href="report/" class="tabl">Report</a>
   </nav>
   <div class="status" id="status">Loading…</div>
 </header>
@@ -66,6 +75,7 @@
       </div>
     </div>
     <div class="legend" id="legend"></div>
+    <div class="disclaimer">Exploration tool · estimates, not investment advice · data: NASA/JPL, gold-api.com, Umicore</div>
   </section>
 
   <section id="tab-materials" class="tab">
