@@ -2,7 +2,7 @@
   --bg:#06070a; --panel:rgba(14,16,21,.86); --line:#1f232c; --line2:#2a2f3a;
   --text:#e6e8ec; --muted:#8a909c; --dim:#5a606b; --accent:#ff9f1c;
   --good:#3fcf6e; --bad:#ff5a5f;
-  --common:#8a8f98; --uncommon:#3fcf6e; --rare:#3a8bff; --epic:#b26bff; --legendary:#ff9f1c;
+  --common:#8a8f98; --uncommon:#3fcf6e; --rare:#3a8bff; --epic:#b26bff; --legendary:#ff9f1c; --mythic:#ff2e3f;
   --mono:'JetBrains Mono',ui-monospace,monospace;
 }
 *{box-sizing:border-box}

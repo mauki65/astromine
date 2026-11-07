@@ -47,6 +47,7 @@ export const CLASSES = {
 };
 
 export const TIERS = [
+  { key: 'mythic',    label: 'Mythic',    color: '#ff2e3f', top: 0.001 },
   { key: 'legendary', label: 'Legendary', color: '#ff9f1c', top: 0.005 },
   { key: 'epic',      label: 'Epic',      color: '#b26bff', top: 0.025 },
   { key: 'rare',      label: 'Rare',      color: '#3a8bff', top: 0.09 },

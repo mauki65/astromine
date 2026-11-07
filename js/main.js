@@ -168,7 +168,7 @@ function drawNow() {
   }
 
   // asteroids — draw low tiers first
-  const order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+  const order = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
   const big = sc > 400;
   for (const tk of order) {
     if (!st.tiers.has(tk)) continue;
@@ -193,13 +193,18 @@ function drawNow() {
       }
       ctx.globalAlpha = 1; continue;
     }
-    const rad = { rare: 2.6, epic: 3.3, legendary: 4.2 }[tk] + (big ? 1 : 0);
-    ctx.strokeStyle = T.color; ctx.lineWidth = tk === 'legendary' ? 1.8 : 1.3; ctx.fillStyle = '#06070a';
+    const rad = { rare: 2.6, epic: 3.3, legendary: 4.2, mythic: 5 }[tk] + (big ? 1 : 0);
+    ctx.strokeStyle = T.color; ctx.lineWidth = tk === 'mythic' ? 2.2 : tk === 'legendary' ? 1.8 : 1.3; ctx.fillStyle = '#06070a';
     for (let k = 0; k < objs.length; k++) {
       const o = objs[k]; if (o.tier.key !== tk || !visible(o)) continue;
       const [sx, sy] = toS(posX[k], posY[k], O);
       if (sx < -10 || sy < -10 || sx > W + 10 || sy > H + 10) continue;
-      if (tk === 'legendary') {
+      if (tk === 'mythic') {  // pulsing red halo
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+        ctx.save(); ctx.globalAlpha = 0.15 + 0.2 * pulse; ctx.strokeStyle = T.color; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, rad + 6 + 3 * pulse, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      if (tk === 'legendary' || tk === 'mythic') {
         ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = T.color;
         ctx.beginPath(); ctx.arc(sx, sy, rad + 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       }
@@ -525,10 +530,11 @@ $('#about').innerHTML = `
 <li>Propellant from the rocket equation with your Isp. Return fuel can be made from asteroid water (C/D/X types).</li>
 <li>Cargo is filled with the most valuable material first. Selling hundreds of tonnes of rhodium crashes its price — the market-impact switch models that.</li>
 <li>Profit = expected revenue × (1 − failure risk) − launch − spacecraft − operations − processing.</li>
-<li>Rarity is your rank by expected profit: top 0.5% Legendary, 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
+<li>Rarity is your rank by expected profit: top 0.1% Mythic, 0.5% Legendary, 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
 </ul>
 <p class="muted">First-order estimates for exploring the trade-offs, not investment advice.</p>`;
 
+setInterval(() => { if (!st.playing && ranked.some(o => o.tier.key === 'mythic' && st.tiers.has('mythic'))) draw(); }, 50);
 window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => { if (e.key === 'Escape') select(null); });
 if (innerWidth < 860) { $('#mission').classList.add('collapsed'); $('#collapse-left').textContent = '+'; }
