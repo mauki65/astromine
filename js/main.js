@@ -1,7 +1,7 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
 import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, decodeRows } from './pipeline.js';
 import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
-import { openAbout } from './about.js';
+import { openAbout, photoOf, credit } from './about.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
 const $ = s => document.querySelector(s);
@@ -15,7 +15,7 @@ const store = {
 const S = { ...DEFAULTS, ...store.get('settings', {}) };
 delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
 const st = {
-  jd: jdNow(), live: true, playing: false, speed: 30, frame: store.get('frame', 'earth'),
+  jd: jdNow(), live: true, playing: false, speed: 1, frame: store.get('frame', 'earth'),
   view: { cx: 0, cy: 0, scale: 1 }, sel: null, hover: null,
   tiers: new Set(TIERS.map(t => t.key)), comets: store.get('comets', false), asteroids: store.get('asteroids', true), group: 'all', onlyProfit: false, query: '',
 };
@@ -523,6 +523,7 @@ function renderDetail(o) {
     <div class="row"><div><h2>${esc(shortName(o.name))}</h2>
       <span class="badge" title="Rank uses the best launch window">${icon(SHAPE[T.key], T.color)} ${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
       <button class="icon" id="close" title="Close">✕</button></div>
+    ${photoOf(o) ? `<div class="dthumb" id="dthumb" title="Open photo and story"><div class="dthumb-ph"></div><span>Real image · ${esc(photoOf(o)[1])}</span></div>` : ''}
     <button class="aboutbtn" id="aboutbtn">About this object — origin, photo &amp; story →</button>
   </div>
   <div class="db">
@@ -569,6 +570,11 @@ function renderDetail(o) {
   </div>`;
   $('#close').onclick = () => select(null);
   $('#aboutbtn').onclick = () => openAbout(o);
+  const ph = photoOf(o), th = $('#dthumb');
+  if (ph && th) {
+    th.onclick = () => openAbout(o);
+    credit(ph[0]).then(c => { if (c && st.sel === o && th.isConnected) th.querySelector('.dthumb-ph').outerHTML = `<img src="${esc(c.src)}" alt="${esc(o.name)}">`; });
+  }
   $('#focus').onclick = () => focus(o);
 }
 

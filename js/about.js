@@ -58,7 +58,13 @@ async function wiki(o) {
   }
   return null;
 }
-async function credit(file) {
+const creditCache = new Map();
+export function photoOf(o) { return PHOTOS[idOf(o)] || null; }
+export function credit(file) {
+  if (!creditCache.has(file)) creditCache.set(file, creditFetch(file));
+  return creditCache.get(file);
+}
+async function creditFetch(file) {
   try {
     const u = `https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=900&titles=File:${encodeURIComponent(file)}`;
     const p = Object.values((await fetch(u).then(r => r.json())).query.pages)[0].imageinfo[0];
