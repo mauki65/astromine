@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -43,6 +43,8 @@ jobs:
         run: pip install --quiet pyarrow && python3 scripts/taxonomy.py
       - run: node scripts/lambert-batch.mjs
       - run: node scripts/report.mjs
+      - name: Validate every number before publishing (fails = site keeps the last good version)
+        run: node scripts/validate.mjs
       - run: node scripts/stamp.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

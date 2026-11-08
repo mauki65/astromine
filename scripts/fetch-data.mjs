@@ -2,6 +2,7 @@
 // and metal prices (gold-api.com live spot + Umicore PGM daily), writes /data/*.json.
 // Runs in GitHub Actions (Node 20+). No API keys needed.
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
+import { PRICE_BOUNDS } from '../js/pipeline.js';
 
 const DATA = new URL('../data/', import.meta.url);
 const UA = { 'User-Agent': 'astromine-data-bot (github actions)' };
@@ -143,13 +144,17 @@ async function closeApproaches() {
 
 // ---------- Prices ($/kg) ----------
 const OZT = 0.0311034768; // kg per troy ounce
+
 async function prices() {
   let prev = {};
   try { prev = JSON.parse(await readFile(new URL('prices.json', DATA), 'utf8')); } catch {}
   const p = structuredClone(prev.metals || {});
   const now = new Date().toISOString();
+  // Guard against bad feed values: plausible absolute range ($/kg) and no >40% jump vs the last good value.
   const set = (k, usdPerKg, source, asOf = now) => {
-    if (!(usdPerKg > 0)) return;
+    const [lo, hi] = PRICE_BOUNDS[k] || [0, Infinity], old = p[k]?.usdPerKg;
+    if (!(usdPerKg >= lo && usdPerKg <= hi)) return console.warn(`price ${k}=${usdPerKg} outside ${lo}-${hi}, kept ${old}`);
+    if (old && Math.abs(usdPerKg / old - 1) > 0.4) return console.warn(`price ${k} jumped ${old}→${usdPerKg}, kept old`);
     p[k] = { ...(p[k] || {}), usdPerKg: +usdPerKg.toPrecision(6), source, asOf };
   };
 

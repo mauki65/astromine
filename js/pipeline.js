@@ -15,7 +15,8 @@ export function decodeRows(d) {
   return { ...d, rows };
 }
 // lambert.json stores each trajectory as a compact array
-export const LAM_FIELDS = ['t0', 'tof', 'tofRet', 't1', 't2', 'vinf', 'arr', 'd3', 'vEntry', 'total', 'stay', 'at'];
+export const LAM_FIELDS = ['t0', 'tof', 'tofRet', 't1', 't2', 'vinf', 'arr', 'd3', 'vEntry', 'total', 'stay', 'at', 'ver'];
+export const LAM_VERSION = 2; // bump when trajectory physics change → everything is recomputed
 export function decodeLambert(l) {
   if (!l || !l.fields) return l;
   return { ...l, list: Object.fromEntries(Object.entries(l.list).map(([k, a]) => [k, Object.fromEntries(l.fields.map((f, j) => [f, a[j]]))])) };
@@ -23,6 +24,12 @@ export function decodeLambert(l) {
 export function encodeLambert(meta, list) {
   return { ...meta, fields: LAM_FIELDS, list: Object.fromEntries(Object.entries(list).map(([k, r]) => [k, LAM_FIELDS.map(f => r[f])])) };
 }
+
+// $/kg; generous but excludes unit mix-ups (×31 troy oz/kg, ×1000 g/kg, ×2.2 lb/kg)
+export const PRICE_BOUNDS = { // $/kg, generous but excludes unit mix-ups (×31 troz, ×1000 g, ×2.2 lb)
+  Au: [30e3, 400e3], Ag: [300, 8e3], Pt: [15e3, 250e3], Pd: [8e3, 250e3], Rh: [30e3, 2e6], Ir: [30e3, 2e6],
+  Ru: [3e3, 400e3], Os: [3e3, 100e3], Cu: [3, 40], Ni: [5, 60], Co: [10, 200], Fe: [0.05, 5], water: [10, 1e5],
+};
 
 export const shortName = n => n.replace(/^\((.*)\)$/, '$1');
 const OZT = 0.0311034768;
@@ -112,8 +119,9 @@ export async function refreshSpot(metals) {
     try {
       const j = await fetch(`https://api.gold-api.com/price/${sym}`, { cache: 'no-store' }).then(r => r.json());
       const v = sym === 'HG' ? j.price * 2.20462 : j.price / OZT;
-      if (v > 0) {
-        if (Math.abs(v - (metals[k]?.usdPerKg || 0)) / v > 1e-4) changed = true;
+      const ref = metals[k]?.usdPerKg;
+      if (v > 0 && (!ref || Math.abs(v / ref - 1) < 0.4)) {  // ignore glitchy ticks
+        if (Math.abs(v - (ref || 0)) / v > 1e-4) changed = true;
         metals[k] = { ...metals[k], usdPerKg: v, source: 'gold-api.com live spot', asOf: j.updatedAt || new Date().toISOString(), live: true };
       }
     } catch {}
