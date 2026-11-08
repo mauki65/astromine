@@ -8,12 +8,12 @@ import { renderReport, pickPast } from '../js/report-core.js';
 const ROOT = new URL('../', import.meta.url);
 const read = async (f, d) => { try { return JSON.parse(await readFile(new URL(f, ROOT), 'utf8')); } catch (e) { if (d !== undefined) return d; throw e; } };
 
-const [ast, com, nh, lam, pr, ca, hist] = await Promise.all([
+const [ast, com, nh, lam, pr, ca, hist, tax] = await Promise.all([
   read('data/asteroids.json'), read('data/comets.json', null), read('data/nhats.json', null), read('data/lambert.json', null),
-  read('data/prices.json'), read('data/close-approaches.json', { list: [] }), read('data/history.json', { days: {} }),
+  read('data/prices.json'), read('data/close-approaches.json', { list: [] }), read('data/history.json', { days: {} }), read('data/taxonomy.json', null),
 ]);
 const prices = pricesFrom(pr.metals);
-const objs = buildObjects({ ast, com, nh, lam, cad: ca });
+const objs = buildObjects({ ast, com, nh, lam, tax, cad: ca });
 const ranked = rankAll(objs, { ...DEFAULTS }, prices);
 
 // daily history snapshot (120 days) for "vs last week"

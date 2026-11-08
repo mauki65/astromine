@@ -34,13 +34,16 @@ jobs:
       - name: Restore previous data from the live site
         run: |
           mkdir -p data
-          for f in asteroids comets nhats lambert prices close-approaches history; do
+          for f in asteroids comets nhats lambert prices close-approaches history taxonomy; do
             curl -fsSL --retry 2 "https://mauki65.github.io/astromine/data/$f.json" -o "data/$f.json.tmp" \
               && mv "data/$f.json.tmp" "data/$f.json" || echo "no previous $f.json"
           done
       - run: node scripts/fetch-data.mjs
+      - name: Composition and sizes from SsODNet (weekly)
+        run: pip install --quiet pyarrow && python3 scripts/taxonomy.py
       - run: node scripts/lambert-batch.mjs
       - run: node scripts/report.mjs
+      - run: node scripts/stamp.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

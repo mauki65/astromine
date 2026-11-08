@@ -4,6 +4,26 @@
 import { ORDER, prepare, evaluate, assignTiers, applyNhats } from './model.js';
 import { depLEO, depMoon } from './lambert.js';
 
+// asteroids.json is columnar (see scripts/fetch-data.mjs); older row format still accepted
+export function decodeRows(d) {
+  if (!d || d.rows) return d;
+  const rows = Array.from({ length: d.n }, () => new Array(d.fields.length).fill(null));
+  d.fields.forEach((f, j) => {
+    if (d.cols[f]) d.cols[f].forEach((v, i) => { rows[i][j] = v; });
+    else { for (const [i, v] of Object.entries(d.sparse[f] || {})) rows[i][j] = v; if (['neo', 'pha', 'radar'].includes(f)) rows.forEach(r => { if (r[j] === null) r[j] = 0; }); }
+  });
+  return { ...d, rows };
+}
+// lambert.json stores each trajectory as a compact array
+export const LAM_FIELDS = ['t0', 'tof', 'tofRet', 't1', 't2', 'vinf', 'arr', 'd3', 'vEntry', 'total', 'stay', 'at'];
+export function decodeLambert(l) {
+  if (!l || !l.fields) return l;
+  return { ...l, list: Object.fromEntries(Object.entries(l.list).map(([k, a]) => [k, Object.fromEntries(l.fields.map((f, j) => [f, a[j]]))])) };
+}
+export function encodeLambert(meta, list) {
+  return { ...meta, fields: LAM_FIELDS, list: Object.fromEntries(Object.entries(list).map(([k, r]) => [k, LAM_FIELDS.map(f => r[f])])) };
+}
+
 export const shortName = n => n.replace(/^\((.*)\)$/, '$1');
 const OZT = 0.0311034768;
 
@@ -16,6 +36,13 @@ export function applyLambert(o, r) {
   });
 }
 
+function tkeys(name) {
+  const k = [name], p = name.match(/\(([^)]+)\)/)?.[1], n = name.match(/^(\d+)\s/)?.[1];
+  if (p) k.push(p); if (n) k.push(n);
+  if (name.includes('/')) k.push(...name.split('/', 2));
+  return k;
+}
+
 export function keysOf(o) {
   const num = o.name.match(/^(\d+)\s/)?.[1], prov = o.name.match(/\(([^)]+)\)/)?.[1];
   return [num, prov, shortName(o.name)].filter(Boolean);
@@ -23,10 +50,34 @@ export function keysOf(o) {
 
 // data = { ast, com, nh, lam, cad } (parsed JSON files); extra(o) lets the map add drawing fields
 export function buildObjects(data, extra) {
-  const NH = data.nh?.list || {}, LAM = data.lam?.list || {};
+  const NH = data.nh?.list || {}, LAM = decodeLambert(data.lam)?.list || {};
+  const ast = decodeRows(data.ast);
   const cad = new Map(); for (const c of data.cad?.list || []) if (!cad.has(c.des)) cad.set(c.des, c);
-  const mk = F => r => {
+  const TAX = data.tax || { ast: {}, com: {} };
+  const mk = F => {
+    const ix = Object.fromEntries(F.map((f, j) => [f, j]));
+    return r => {
+    // fill gaps in NASA's record with SsODNet (spectra/survey colours, measured sizes)
+    let tech = null;
+    const keys = tkeys(r[0]);
+    if (ix.comet !== undefined && r[ix.comet]) {
+      const D = keys.map(k => TAX.com[k]).find(v => v);
+      if (D && r[ix.diameter] == null) { r = r.slice(); r[ix.diameter] = D; }
+    } else {
+      const t = keys.map(k => TAX.ast[k]).find(Boolean);
+      if (t) {
+        r = r.slice();
+        if (t[0] && !r[ix.spec_B] && !r[ix.spec_T]) { r[ix.spec_T] = t[0]; tech = t[1] || 'survey'; }
+        if (t[2] && r[ix.diameter] == null) r[ix.diameter] = t[2];
+        if (t[3] && r[ix.albedo] == null) r[ix.albedo] = t[3];
+      }
+    }
     const o = prepare(r, F);
+    if (tech) {
+      const spec = /spec/i.test(tech);
+      o.basis = `${spec ? 'Spectrum' : 'Survey colours (Gaia/SDSS)'} – type ${o.spec_T} (SsODNet)`;
+      if (!spec) o.conf = 0.7;
+    }
     o.keys = keysOf(o);
     o.ca = o.keys.map(k => cad.get(k)).find(Boolean) || null;
     o.belt = !o.neo && !o.comet;
@@ -38,8 +89,8 @@ export function buildObjects(data, extra) {
     }
     if (extra) extra(o);
     return o;
-  };
-  const objs = (data.ast?.rows || []).map(mk(data.ast.fields));
+  }; };
+  const objs = (ast?.rows || []).map(mk(ast.fields));
   if (data.com?.rows?.length) objs.push(...data.com.rows.map(mk(data.com.fields)));
   return objs;
 }

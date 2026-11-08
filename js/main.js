@@ -1,5 +1,5 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
-import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert } from './pipeline.js';
+import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, decodeRows } from './pipeline.js';
 import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
@@ -60,9 +60,9 @@ async function load() {
   }
   meta = { generated: ast.generated, source: ast.source, prices: pr.generated };
   const J = f => fetch(`data/${f}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const [nh, com, lam] = await Promise.all([J('nhats.json'), J('comets.json'), J('lambert.json')]);
+  const [nh, com, lam, tax] = await Promise.all([J('nhats.json'), J('comets.json'), J('lambert.json'), J('taxonomy.json')]);
   meta.lambert = lam?.generated;
-  objs = buildObjects({ ast, com, nh, lam, cad: ca }, o => {
+  objs = buildObjects({ ast, com, nh, lam, tax, cad: ca }, o => {
     o.B = orbitBasis(o.a, o.e, o.i, o.om, o.w);
     o.M0 = o.ma * Math.PI / 180;
   });
@@ -136,6 +136,17 @@ function strokePath(pts, O) {
   ctx.closePath(); ctx.stroke();
 }
 
+// Tier shapes (not only colours) so tiers stay distinguishable for colour-blind viewers.
+export const SHAPE = { common: 'dot', uncommon: 'square', rare: 'circle', epic: 'triangle', legendary: 'diamond', mythic: 'star' };
+function shapePath(kind, x, y, r) {
+  ctx.beginPath();
+  if (kind === 'triangle') { const h = r * 1.25; ctx.moveTo(x, y - h); ctx.lineTo(x + h * 0.95, y + h * 0.6); ctx.lineTo(x - h * 0.95, y + h * 0.6); ctx.closePath(); }
+  else if (kind === 'diamond') { const h = r * 1.3; ctx.moveTo(x, y - h); ctx.lineTo(x + h, y); ctx.lineTo(x, y + h); ctx.lineTo(x - h, y); ctx.closePath(); }
+  else if (kind === 'star') { const R = r * 1.5, q = R * 0.45; for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? q : R; k ? ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)) : ctx.moveTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); } ctx.closePath(); }
+  else if (kind === 'square') ctx.rect(x - r, y - r, 2 * r, 2 * r);
+  else ctx.arc(x, y, r, 0, Math.PI * 2);
+}
+
 let raf = 0;
 function draw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawNow(); }); }
 function drawNow() {
@@ -201,7 +212,7 @@ function drawNow() {
         ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = T.color;
         ctx.beginPath(); ctx.arc(sx, sy, rad + 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       }
-      ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      shapePath(SHAPE[tk], sx, sy, rad); ctx.fill(); ctx.stroke();
     }
   }
 
@@ -217,9 +228,9 @@ function drawNow() {
         g.addColorStop(0, 'rgba(111,195,223,.7)'); g.addColorStop(1, 'rgba(111,195,223,0)');
         ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ux * L, sy + uy * L); ctx.stroke();
       }
-      const d = o.tier.key === 'common' ? 2.5 : 3.5;
+      const d = o.tier.key === 'common' ? 2.2 : 3.2;
       ctx.strokeStyle = o.tier.color; ctx.fillStyle = '#06070a'; ctx.lineWidth = 1.3;
-      ctx.beginPath(); ctx.moveTo(sx, sy - d); ctx.lineTo(sx + d, sy); ctx.lineTo(sx, sy + d); ctx.lineTo(sx - d, sy); ctx.closePath(); ctx.fill(); ctx.stroke();
+      shapePath(o.tier.key === 'common' || o.tier.key === 'uncommon' ? 'circle' : SHAPE[o.tier.key], sx, sy, d); ctx.fill(); ctx.stroke();
     }
   }
 
@@ -241,6 +252,7 @@ function drawNow() {
   g.addColorStop(0, 'rgba(255,214,120,.9)'); g.addColorStop(1, 'rgba(255,170,60,0)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, 18, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffd98a'; ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#9aa0ab'; ctx.font = '11px Inter, sans-serif'; ctx.fillText('Sun', sx + 9, sy + 4);
 
   // planets + Moon
   ctx.font = '11px Inter, sans-serif';
@@ -330,7 +342,7 @@ setInterval(async () => {  // pick up new catalogue/price commits from the hourl
     let ch = false; for (const [k, m] of Object.entries(j.metals || {})) if (!priceMeta[k]?.live && priceMeta[k]?.usdPerKg !== m.usdPerKg) { priceMeta[k] = m; ch = true; }
     if (ch) recompute();
     // new trajectories from the hourly job → apply them so the map matches the report
-    const l = await fetch('data/lambert.json', { cache: 'no-store' }).then(r => r.json());
+    const l = decodeLambert(await fetch('data/lambert.json', { cache: 'no-store' }).then(r => r.json()));
     if (l.generated !== meta.lambert) {
       meta.lambert = l.generated;
       for (const o of objs) { const r = l.list[o.name]; if (r && !o.comet && r.at !== o.lam?.at) applyLambert(o, r); }
@@ -392,14 +404,22 @@ function segment(sel, val, cb) {
 }
 
 // ---------- UI: legend, filters, list ----------
+function icon(kind, c) {
+  const P = { dot: '<circle cx="7" cy="7" r="2" fill="C"/>', square: '<rect x="4" y="4" width="6" height="6" fill="C"/>',
+    circle: '<circle cx="7" cy="7" r="4.2" fill="none" stroke="C" stroke-width="1.8"/>',
+    triangle: '<path d="M7 2.2 12 11H2z" fill="none" stroke="C" stroke-width="1.6" stroke-linejoin="round"/>',
+    diamond: '<path d="M7 1.6 12.4 7 7 12.4 1.6 7z" fill="none" stroke="C" stroke-width="1.6"/>',
+    star: '<path d="M7 1 8.6 5.1 13 5.3 9.6 8 10.8 12.3 7 9.9 3.2 12.3 4.4 8 1 5.3 5.4 5.1z" fill="none" stroke="C" stroke-width="1.5" stroke-linejoin="round"/>' };
+  return `<svg class="ic" width="14" height="14" viewBox="0 0 14 14">${P[kind].replace(/C/g, c)}</svg>`;
+}
 function renderLegend() {
   const counts = {};
   for (const o of objs) if (o.comet ? st.comets : st.asteroids) counts[o.tier.key] = (counts[o.tier.key] || 0) + 1;
   const nA = objs.filter(o => !o.comet).length, nC = objs.length - nA;
-  $('#legend').innerHTML = [...TIERS].map(t => `<button data-t="${t.key}" class="${st.tiers.has(t.key) ? '' : 'off'}"><i style="border-color:${t.color}"></i><b>${t.label}</b><span class="mono">${(counts[t.key] || 0).toLocaleString()}</span></button>`).join('') +
+  $('#legend').innerHTML = [...TIERS].map(t => `<button data-t="${t.key}" class="${st.tiers.has(t.key) ? '' : 'off'}">${icon(SHAPE[t.key], t.color)}<b>${t.label}</b><span class="mono">${(counts[t.key] || 0).toLocaleString()}</span></button>`).join('') +
     `<span class="lsep"></span>` +
-    `<button data-k="asteroids" class="${st.asteroids ? '' : 'off'}"><i class="ic-ast"></i><b>Asteroids</b><span class="mono">${nA.toLocaleString()}</span></button>` +
-    `<button data-k="comets" class="${st.comets ? '' : 'off'}"><i class="ic-com"></i><b>Comets</b><span class="mono">${nC.toLocaleString()}</span></button>`;
+    `<button data-k="asteroids" class="${st.asteroids ? '' : 'off'}"><svg class="ic" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.2" fill="none" stroke="#9aa0ab" stroke-width="1.8"/></svg><b>Asteroids</b><span class="mono">${nA.toLocaleString()}</span></button>` +
+    `<button data-k="comets" class="${st.comets ? '' : 'off'}"><svg class="ic" width="14" height="14" viewBox="0 0 14 14"><path d="M5 9 13 1" stroke="#6fc3df" stroke-width="1.6" opacity=".6"/><circle cx="4.5" cy="9.5" r="3" fill="none" stroke="#6fc3df" stroke-width="1.6"/></svg><b>Comets</b><span class="mono">${nC.toLocaleString()}</span></button>`;
   $('#legend').querySelectorAll('button').forEach(b => b.onclick = () => {
     if (b.dataset.k) setLayer(b.dataset.k, !st[b.dataset.k]);
     else { const k = b.dataset.t; st.tiers.has(k) ? st.tiers.delete(k) : st.tiers.add(k); renderLegend(); renderList(); draw(); }
@@ -437,7 +457,7 @@ function renderList() {
   $('#tcount').textContent = `${prof.toLocaleString()} profitable`;
   $('#tlist').innerHTML = list.map(o => `<li data-i="${objs.indexOf(o)}">
     <span class="bar" style="background:${o.tier.color}"></span>
-    <span><div class="n">${esc(shortName(o.name))}</div><div class="s"><i class="evd" style="background:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].label}"></i>#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)}${o.dv.src === 'estimate' ? '~' : ''} km/s</div></span>
+    <span><div class="n">${icon(SHAPE[o.tier.key], o.tier.color)} ${esc(shortName(o.name))}</div><div class="s"><i class="evd" style="background:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].label}"></i>#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)}${o.dv.src === 'estimate' ? '~' : ''} km/s</div></span>
     <span class="v ${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span></li>`).join('') || '<li class="muted" style="display:block">No matches</li>';
   $('#tlist').querySelectorAll('li[data-i]').forEach(li => li.onclick = () => { const o = objs[+li.dataset.i]; select(o); focus(o); });
 }
@@ -500,7 +520,7 @@ function renderDetail(o) {
   el.innerHTML = `
   <div class="dh">
     <div class="row"><div><h2>${esc(shortName(o.name))}</h2>
-      <span class="badge" title="Rank uses the best launch window">${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
+      <span class="badge" title="Rank uses the best launch window">${icon(SHAPE[T.key], T.color)} ${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
       <button class="icon" id="close" title="Close">✕</button></div>
   </div>
   <div class="db">

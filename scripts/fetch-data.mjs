@@ -9,6 +9,21 @@ await mkdir(DATA, { recursive: true });
 
 const r6 = v => (v === null || v === '' || v === undefined) ? null : +(+v).toPrecision(7);
 
+// Columnar, precision-trimmed encoding (~20% smaller gzipped); decoded by js/pipeline.js decodeRows().
+// Orbit angles to 1e-5 relative precision → position error far below map resolution.
+const PREC = { a: 6, e: 5, i: 5, om: 5, w: 5, ma: 5, H: 3, diameter: 3, albedo: 3, moid: 3 };
+function compact(rows, fields, meta) {
+  const cols = {}, sparse = {};
+  fields.forEach((f, j) => {
+    let col = rows.map(r => r[j] ?? null);
+    if (PREC[f]) col = col.map(v => v == null ? null : +(+v).toPrecision(PREC[f]));
+    const filled = col.filter(v => v !== null && v !== 0).length;
+    if (filled < rows.length * 0.3) sparse[f] = Object.fromEntries(col.map((v, i) => [i, v]).filter(([, v]) => v !== null && v !== 0));
+    else cols[f] = col;
+  });
+  return { ...meta, n: rows.length, fields, cols, sparse };
+}
+
 async function getJSON(url, tries = 3) {
   for (let k = 1; ; k++) {
     const res = await fetch(url, { headers: UA }).catch(e => ({ ok: false, status: e.message }));
@@ -57,12 +72,9 @@ async function asteroids() {
     ]);
   }
   const rows = [...seen.values()];
-  await writeFile(new URL('asteroids.json', DATA), JSON.stringify({
-    generated: new Date().toISOString(),
-    source: 'NASA/JPL Small-Body Database (ssd-api.jpl.nasa.gov)',
-    fields: ['name', 'a', 'e', 'i', 'om', 'w', 'ma', 'epoch', 'H', 'diameter', 'albedo', 'spec_B', 'spec_T', 'neo', 'pha', 'class', 'moid', 'radar'],
-    rows,
-  }));
+  await writeFile(new URL('asteroids.json', DATA), JSON.stringify(compact(rows,
+    ['name', 'a', 'e', 'i', 'om', 'w', 'ma', 'epoch', 'H', 'diameter', 'albedo', 'spec_B', 'spec_T', 'neo', 'pha', 'class', 'moid', 'radar'],
+    { generated: new Date().toISOString(), source: 'NASA/JPL Small-Body Database (ssd-api.jpl.nasa.gov)' })));
   console.log(`asteroids.json: ${rows.length} objects`);
 }
 

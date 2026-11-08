@@ -8,13 +8,13 @@ const J = f => fetch(`../data/${f}`, { cache: 'no-store' }).then(r => r.ok ? r.j
 let objs = null, metals = null, ca = null, hist = null, lam = null;
 
 async function loadData() {
-  const [ast, com, nh, l, pr, c, h] = await Promise.all(['asteroids.json', 'comets.json', 'nhats.json', 'lambert.json', 'prices.json', 'close-approaches.json', 'history.json'].map(J));
+  const [ast, com, nh, l, pr, c, h, tax] = await Promise.all(['asteroids.json', 'comets.json', 'nhats.json', 'lambert.json', 'prices.json', 'close-approaches.json', 'history.json', 'taxonomy.json'].map(J));
   if (!ast || !pr) return false;
   lam = l; ca = c || { list: [] }; hist = h || { days: {} };
   // keep live spot values across data reloads
   const live = metals ? Object.fromEntries(Object.entries(metals).filter(([, m]) => m.live)) : {};
   metals = { ...pr.metals, ...live };
-  objs = buildObjects({ ast, com, nh, lam, cad: ca });
+  objs = buildObjects({ ast, com, nh, lam, tax, cad: ca });
   return true;
 }
 

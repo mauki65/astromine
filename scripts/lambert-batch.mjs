@@ -5,7 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { DEFAULTS } from '../js/model.js';
 import { body, porkchop } from '../js/lambert.js';
 import { jdNow, planetElements } from '../js/orbits.js';
-import { buildObjects, rankAll, pricesFrom } from '../js/pipeline.js';
+import { buildObjects, rankAll, pricesFrom, decodeLambert, encodeLambert } from '../js/pipeline.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = async (f, d) => { try { return JSON.parse(await readFile(new URL(f, ROOT), 'utf8')); } catch (e) { if (d !== undefined) return d; throw e; } };
@@ -13,13 +13,14 @@ const BUDGET_MS = +(process.env.LAMBERT_BUDGET_MS || 12 * 60e3);
 const TOP_N = 2500, STALE_MS = 3 * 864e5;
 const t0 = Date.now();
 
-const [ast, nh, pr, prev] = await Promise.all([
-  read('data/asteroids.json'), read('data/nhats.json', { list: {} }), read('data/prices.json'), read('data/lambert.json', { list: {} }),
+const [ast, nh, pr, prevRaw, tax] = await Promise.all([
+  read('data/asteroids.json'), read('data/nhats.json', { list: {} }), read('data/prices.json'), read('data/lambert.json', { list: {} }), read('data/taxonomy.json', null),
 ]);
+const prev = decodeLambert(prevRaw);
 const S = { ...DEFAULTS };
 const stayDays = Math.round(S.stayMonths * 30.44);
 // rank WITHOUT Lambert to choose candidates fairly
-const objs = buildObjects({ ast, nh });
+const objs = buildObjects({ ast, nh, tax });
 rankAll(objs, S, pricesFrom(pr.metals));
 const reach = objs.filter(o => o.Q <= 6);
 const cand = new Map();
@@ -50,8 +51,8 @@ for (const o of todo) {
   else if (prev.list[o.name]) list[o.name] = prev.list[o.name];
 }
 const remaining = todo.length - done;
-await writeFile(new URL('data/lambert.json', ROOT), JSON.stringify({
+await writeFile(new URL('data/lambert.json', ROOT), JSON.stringify(encodeLambert({
   generated: new Date().toISOString(), stayDays, source: 'Lambert-optimised round trips (Astromine hourly job)',
-  coverage: { candidates: cand.size, computed: Object.keys(list).length, pending: remaining }, list,
-}));
+  coverage: { candidates: cand.size, computed: Object.keys(list).length, pending: remaining },
+}, list)));
 console.log(`lambert: computed ${done} in ${((Date.now() - t0) / 1000).toFixed(0)}s, total ${Object.keys(list).length}/${cand.size}, pending ${remaining}`);
