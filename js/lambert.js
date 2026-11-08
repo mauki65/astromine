@@ -76,12 +76,21 @@ export function lambert(r1, r2, t) {
 }
 
 // Δv to leave a 400 km LEO / low lunar orbit with hyperbolic excess vinf (km/s)
-export const depLEO = vinf => Math.sqrt(vinf * vinf + 10.85 ** 2) - 7.67;
-export const depMoon = vinf => 1.40 + Math.sqrt(vinf * vinf + 1.44 ** 2) - 1.44;
+// Patched-conic departure burns (constants from GM_Earth, GM_Moon; audited 2026-11-08):
+// LEO 400 km: v_circ 7.669, v_esc 10.845 km/s.
+export const depLEO = vinf => Math.sqrt(vinf * vinf + 10.845 ** 2) - 7.669;
+// Low lunar orbit 100 km (v_circ 1.634, v_esc 2.310): leave the Moon with the excess u needed so that,
+// added to the Moon's orbital speed (1.018), it reaches Earth-escape-plus-vinf at lunar distance (v_esc 1.440).
+export const depMoon = vinf => { const u = Math.max(0, Math.sqrt(vinf * vinf + 1.440 ** 2) - 1.018); return Math.sqrt(u * u + 2.310 ** 2) - 1.634; };
+// Atmospheric entry speed at 120 km for an arrival excess vinf; NASA NHATS limits it to 12 km/s.
+// Faster arrivals need a braking burn at perigee (entry - 12) before entry.
+export const entrySpeed = vinf => Math.sqrt(vinf * vinf + 11.08 ** 2);
+const brake = vinf => Math.max(0, entrySpeed(vinf) - 12);
 
 // Search the next `years` for the cheapest round trip: coarse grid over departure date ×
 // outbound time of flight, then local refinement, then the same for the return leg.
 // Return leg ends with atmospheric entry (no braking burn), capped at 12 km/s like NASA NHATS.
+const MAX_TOF = 720; // days per leg – refinement stays inside the searched range
 export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = 'earth' } = {}) {
   const dep = base === 'moon' ? depMoon : depLEO;
   const out = (t0, tof) => {
@@ -94,8 +103,8 @@ export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = '
   const back = (t1, tof) => {
     const A = stateAt(ast, t1), E = stateAt(earth, t1 + tof);
     const L = lambert(A.r, E.r, tof); if (!L) return null;
-    const vEntry = norm(sub(L[1], E.v)) * KMS; if (vEntry > 12) return null;
-    return { tofRet: tof, d3: norm(sub(L[0], A.v)) * KMS, vEntry };
+    const vArr = norm(sub(L[1], E.v)) * KMS, vEntry = entrySpeed(vArr); if (vEntry > 20) return null;
+    return { tofRet: tof, d3: norm(sub(L[0], A.v)) * KMS + brake(vArr), vEntry };
   };
   // 1) coarse outbound grid
   const outs = [];
@@ -109,8 +118,8 @@ export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = '
   for (const s of seeds) {
     let b = s;
     for (const [dt, dd] of [[10, 15], [4, 6], [2, 2]])
-      for (let t0 = b.t0 - dt * 2; t0 <= b.t0 + dt * 2; t0 += dt)
-        for (let tof = Math.max(20, b.tof - dd * 2); tof <= b.tof + dd * 2; tof += dd) { const o = out(t0, tof); if (o && o.c < b.c) b = o; }
+      for (let t0 = Math.max(jd0 + 30, b.t0 - dt * 2); t0 <= Math.min(jd0 + years * 365.25, b.t0 + dt * 2); t0 += dt)  // never before now+30 d
+        for (let tof = Math.max(20, b.tof - dd * 2); tof <= Math.min(MAX_TOF, b.tof + dd * 2); tof += dd) { const o = out(t0, tof); if (o && o.c < b.c) b = o; }
     refined.push(b);
   }
   // 3) return leg for each refined window
@@ -120,7 +129,7 @@ export function porkchop(earth, ast, jd0, { years = 10, stayDays = 270, base = '
     let r = null;
     for (let tof = 30; tof <= 720; tof += 20) { const x = back(t1, tof); if (x && (!r || x.d3 < r.d3)) r = x; }
     if (!r) continue;
-    for (const dd of [8, 3, 1]) for (let tof = r.tofRet - dd * 2; tof <= r.tofRet + dd * 2; tof += dd) { const x = tof >= 20 && back(t1, tof); if (x && x.d3 < r.d3) r = x; }
+    for (const dd of [8, 3, 1]) for (let tof = r.tofRet - dd * 2; tof <= Math.min(MAX_TOF, r.tofRet + dd * 2); tof += dd) { const x = tof >= 20 && back(t1, tof); if (x && x.d3 < r.d3) r = x; }
     const total = o.d1 + o.arr + r.d3;
     if (!best || total < best.total) best = { ...o, ...r, total, t1, t2: t1 + r.tofRet };
   }
@@ -144,10 +153,10 @@ export function fixedLaunch(earth, ast, t0, { stayDays = 270, base = 'earth' } =
     for (let tof = 30; tof <= 900; tof += 10) {
       const E2 = stateAt(earth, t1 + tof);
       const L = lambert(A.r, E2.r, tof); if (!L) continue;
-      const d3 = norm(sub(L[0], A.v)) * KMS, vEntry = norm(sub(L[1], E2.v)) * KMS;
-      const pen = Math.max(0, vEntry - 12);   // braking burn needed above 12 km/s entry
-      const total = o.d1 + o.arr + d3 + pen;
-      if (!best || total < best.total) best = { ...o, tofRet: tof, d3: d3 + pen, vEntry, total, t1, t2: t1 + tof };
+      const vArr = norm(sub(L[1], E2.v)) * KMS, vEntry = entrySpeed(vArr);
+      const d3 = norm(sub(L[0], A.v)) * KMS + brake(vArr);
+      const total = o.d1 + o.arr + d3;
+      if (!best || total < best.total) best = { ...o, tofRet: tof, d3, vEntry, total, t1, t2: t1 + tof };
     }
   }
   return best;

@@ -453,11 +453,11 @@ function renderList() {
     if (q ? !o.name.toLowerCase().includes(q) : !visible(o)) continue;
     list.push(o); if (list.length >= 60) break;
   }
-  const prof = objs.filter(o => o.ev.profit > 0).length;
+  const prof = objs.filter(o => o.ev.profit > 0 && (o.comet ? st.comets : st.asteroids)).length;
   $('#tcount').textContent = `${prof.toLocaleString()} profitable`;
   $('#tlist').innerHTML = list.map(o => `<li data-i="${objs.indexOf(o)}">
     <span class="bar" style="background:${o.tier.color}"></span>
-    <span><div class="n">${icon(SHAPE[o.tier.key], o.tier.color)} ${esc(shortName(o.name))}</div><div class="s"><i class="evd" style="background:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].label}"></i>#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${o.ev.dvOut.toFixed(1)}${o.dv.src === 'estimate' ? '~' : ''} km/s</div></span>
+    <span><div class="n">${icon(SHAPE[o.tier.key], o.tier.color)} ${esc(shortName(o.name))}</div><div class="s"><i class="evd" style="background:${EVIDENCE[o.evidence].color}" title="${EVIDENCE[o.evidence].label}"></i>#${o.rank} · ${typeLabel(o)} · ${dist(o.D)} · Δv ${(o.ev.dvOut + o.ev.dvRet).toFixed(1)}${o.dv.src === 'estimate' ? '~' : ''} km/s</div></span>
     <span class="v ${o.ev.profit > 0 ? 'pos' : 'neg'}">${money(o.ev.profit)}</span></li>`).join('') || '<li class="muted" style="display:block">No matches</li>';
   $('#tlist').querySelectorAll('li[data-i]').forEach(li => li.onclick = () => { const o = objs[+li.dataset.i]; select(o); focus(o); });
 }
@@ -497,7 +497,7 @@ function optimise(o, delay = 30) {
 const rt = d => (S.base === 'moon' ? d.moon : d.leo) + d.dvArr + d.ret;
 function lamText(o) {
   const d = o.dv, nh = d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : '';
-  const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Arrival speed at Earth ${r.vEntry.toFixed(1)} km/s, captured by the atmosphere.`;
+  const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Atmospheric entry at ${Math.min(12, r.vEntry).toFixed(1)} km/s${r.vEntry > 12.05 ? ` (after a braking burn from ${r.vEntry.toFixed(1)})` : ''}.`;
   if (S.launchMode === 'date') {
     if (o.Q > 6 || o.comet) return 'Fixed-date launches are only computed for objects within 6 AU (not comets).';
     if (o.lamBusy || !o.lamDate) return `Computing a launch on ${jdDate(st.jd)}…`;
@@ -637,7 +637,7 @@ $('#about').innerHTML = `
 <p>Nobody has assayed these asteroids. Composition comes from the spectral class (or, failing that, the albedo or orbit) mapped to meteorite analogues: metallic asteroids ≈ iron meteorites (~90% iron-nickel, 10–50 ppm platinum-group metals), stony ≈ ordinary chondrites, carbonaceous ≈ CI/CM chondrites (up to ~10–20% water). Each material gets a <i>chance</i> that reflects how sure we are of the class.</p>
 <h2>Mission model</h2>
 <ul>
-<li>Δv from patched conics: Hohmann-type transfer from 1 AU to the asteroid’s nearest apsis with plane change, or relative velocity at 1 AU for Earth-crossers. Departure from a 400 km LEO (3.2 km/s to escape) or from low lunar orbit (1.4 km/s to escape).</li>
+<li>Δv from patched conics: Hohmann-type transfer from 1 AU to the asteroid’s nearest apsis with plane change, or relative velocity at 1 AU for Earth-crossers. Departure from a 400 km LEO (3.2 km/s to escape) or from a 100 km low lunar orbit (0.7 km/s to escape). Return by atmospheric entry at up to 12 km/s (NASA’s limit); faster arrivals pay for a braking burn.</li>
 <li><b>Moon vs Earth launch</b> — reaching orbit takes ~9.4 km/s from Earth’s surface but only ~1.9 km/s from the Moon’s (1/6 gravity, no air). With the rocket equation that is ~7–8× less propellant per kg; with lunar-made propellant and reusable landers the long-run cost is assumed at ~10% of Earth→LEO (editable). Today, shipping cargo <i>to</i> the Moon still costs ~$1M/kg, so this models a future lunar industry.</li>
 <li>Propellant from the rocket equation with your Isp. Return fuel can be made from asteroid water (C/D/X types).</li>
 <li>Cargo is filled with the most valuable material first. Selling hundreds of tonnes of rhodium crashes its price — the market-impact switch models that.</li>

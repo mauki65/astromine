@@ -1,3 +1,4 @@
+import { depLEO, depMoon, entrySpeed } from './lambert.js';
 // Composition, physical estimates, delta-v and mission economics.
 // All numbers are first-order estimates from meteorite analogues and patched-conic orbital mechanics.
 
@@ -19,11 +20,13 @@ export const ORDER = ['Pt', 'Pd', 'Rh', 'Ir', 'Ru', 'Os', 'Au', 'Co', 'Ni', 'Cu'
 
 const ppm = 1e-6;
 // Bulk mass fractions per composition class + probability the material is present at that grade.
+// Bulk densities (kg/m³): Carry 2012 (Planet. Space Sci. 73, 98) averages; Ryugu & Bennu measured 1190;
+// metal-rich bodies are porous (Psyche ≈ 3900), so iron-meteorite grain density would overstate mass.
 export const CLASSES = {
-  M: { label: 'Metallic (M-type)', analog: 'Iron meteorites', density: 5300, albedo: 0.15,
+  M: { label: 'Metallic (M-type)', analog: 'Iron meteorites', density: 3900, albedo: 0.15,
        g: { Fe: .88, Ni: .09, Co: .005, Cu: 1.5e-4, Pt: 15*ppm, Pd: 4*ppm, Rh: 2*ppm, Ir: 5*ppm, Ru: 6*ppm, Os: 5*ppm, Au: 1*ppm, water: 0 },
        p: { metal: .9, pgm: .7, water: .05 } },
-  X: { label: 'X-type (metal or enstatite)', analog: 'Mixed – needs radar/spectra', density: 3500, albedo: 0.15,
+  X: { label: 'X-type (metal or enstatite)', analog: 'Mixed – needs radar/spectra', density: 2700, albedo: 0.15,
        g: { Fe: .45, Ni: .05, Co: .0025, Cu: 1e-4, Pt: 7*ppm, Pd: 2*ppm, Rh: 1*ppm, Ir: 2.5*ppm, Ru: 3*ppm, Os: 2.5*ppm, Au: .6*ppm, water: .02 },
        p: { metal: .45, pgm: .4, water: .3 } },
   S: { label: 'Stony (S-type)', analog: 'Ordinary chondrites', density: 2700, albedo: 0.25,
@@ -32,13 +35,13 @@ export const CLASSES = {
   Q: { label: 'Fresh stony (Q-type)', analog: 'Unweathered ordinary chondrites', density: 2700, albedo: 0.25,
        g: { Fe: .2, Ni: .012, Co: 6e-4, Cu: 1e-4, Pt: 1*ppm, Pd: .6*ppm, Rh: .15*ppm, Ir: .5*ppm, Ru: .7*ppm, Os: .6*ppm, Au: .2*ppm, water: .001 },
        p: { metal: .85, pgm: .55, water: .1 } },
-  C: { label: 'Carbonaceous (C-type)', analog: 'CI/CM chondrites', density: 1700, albedo: 0.06,
+  C: { label: 'Carbonaceous (C-type)', analog: 'CI/CM chondrites', density: 1300, albedo: 0.06,
        g: { Fe: .18, Ni: .011, Co: 5e-4, Cu: 1.2e-4, Pt: .9*ppm, Pd: .55*ppm, Rh: .13*ppm, Ir: .45*ppm, Ru: .68*ppm, Os: .49*ppm, Au: .15*ppm, water: .10 },
        p: { metal: .6, pgm: .5, water: .85 } },
-  D: { label: 'Primitive (D/P-type)', analog: 'Tagish Lake-like, ice-rich', density: 1300, albedo: 0.05,
+  D: { label: 'Primitive (D/P-type)', analog: 'Tagish Lake-like, ice-rich', density: 1000, albedo: 0.05,
        g: { Fe: .15, Ni: .009, Co: 4e-4, Cu: 1e-4, Pt: .8*ppm, Pd: .5*ppm, Rh: .12*ppm, Ir: .4*ppm, Ru: .6*ppm, Os: .45*ppm, Au: .14*ppm, water: .2 },
        p: { metal: .5, pgm: .45, water: .6 } },
-  E: { label: 'Enstatite (E-type)', analog: 'Aubrites / enstatite chondrites', density: 3000, albedo: 0.5,
+  E: { label: 'Enstatite (E-type)', analog: 'Aubrites / enstatite chondrites', density: 2700, albedo: 0.5,
        g: { Fe: .1, Ni: .006, Co: 3e-4, Cu: 1e-4, Pt: .6*ppm, Pd: .4*ppm, Rh: .1*ppm, Ir: .3*ppm, Ru: .4*ppm, Os: .3*ppm, Au: .1*ppm, water: 0 },
        p: { metal: .5, pgm: .3, water: .02 } },
   K: { label: 'Comet nucleus', analog: 'Rosetta / 67P measurements', density: 550, albedo: 0.04,
@@ -122,11 +125,12 @@ function deltaV(a, e, incDeg) {
     const vt2 = Math.sqrt(2 / r2 - 1 / at), va = Math.sqrt(2 / r2 - 1 / a);
     dvArr = Math.sqrt(vt2 * vt2 + va * va - 2 * vt2 * va * Math.cos(i)) * VE;
   }
-  const leo = Math.sqrt(vinf * vinf + 10.85 ** 2) - 7.67;
-  // from low lunar orbit: 1.40 km/s to Earth-Moon escape (C3=0), plus hyperbolic excess
-  const moon = 1.40 + Math.sqrt(vinf * vinf + 1.44 ** 2) - 1.44;
+  const leo = depLEO(vinf);
+  const moon = depMoon(vinf);
   const transferYr = Math.min(8, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
-  return { vinf, dvArr, leo, moon, ret: dvArr + 0.3, transferYr, src: 'estimate' };
+  // return: leave the asteroid (≈ arrival burn, +0.3 margin) and, if Earth arrival is too fast for a 12 km/s entry, brake
+  const ret = dvArr + 0.3 + Math.max(0, entrySpeed(vinf) - 12);
+  return { vinf, dvArr, leo, moon, ret, transferYr, src: 'estimate' };
 }
 
 // NASA NHATS: round trip from a 400 km LEO, >=8 day stay, <=450 days, Earth return by

@@ -73,7 +73,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   <a class="cta" href="../">Open the live map →</a>
 
   <h2>Top 10 targets right now</h2>
-  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. Change the assumptions on the map.</p>
+  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. <b>Key assumption:</b> water-rich asteroids earn mostly from water, valued at $${Math.round(prices.water || 0).toLocaleString('en-US')}/kg as rocket propellant delivered in Earth orbit — no such market exists yet. Change the assumptions on the map.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / mission</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">vs last week</th></tr></thead>
     <tbody>${topRows}</tbody></table></div>
