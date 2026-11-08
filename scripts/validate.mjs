@@ -4,7 +4,7 @@
 // consistency between the map pipeline and the report page.
 import { readFile } from 'node:fs/promises';
 import { ORDER, TIERS, DEFAULTS, CLASSES } from '../js/model.js';
-import { buildObjects, rankAll, pricesFrom, decodeLambert, PRICE_BOUNDS, LAM_VERSION } from '../js/pipeline.js';
+import { buildObjects, rankAll, pricesFrom, decodeLambert, PRICE_BOUNDS, LAM_VERSION, shortName } from '../js/pipeline.js';
 import { lambert, body, stateAt, depLEO, depMoon, entrySpeed } from '../js/lambert.js';
 import { jdNow, planetElements } from '../js/orbits.js';
 
@@ -113,7 +113,7 @@ try {
   const html = await readFile(new URL('report/index.html', ROOT), 'utf8');
   const first = html.match(/<tbody>\s*<tr>[\s\S]*?<b>([^<]+)<\/b>[\s\S]*?class="num (?:pos|neg)">([^<]+)</);
   const top = A[0], money = v => { const a = Math.abs(v), s = v < 0 ? '−' : ''; return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `${s}$${(a / 1e3).toFixed(1)}k` : `${s}$${a.toFixed(0)}`; };
-  check(first && top.name.endsWith(first[1].replace(/^\((.*)\)$/, '$1')) && first[2] === money(top.ev.profit), `report top (${first?.[1]} ${first?.[2]}) ≠ map top (${top.name} ${money(top.ev.profit)})`);
+  check(first && shortName(top.name) === first[1] && first[2] === money(top.ev.profit), `report top (${first?.[1]} ${first?.[2]}) ≠ map top (${top.name} ${money(top.ev.profit)})`);
 } catch (e) { fail('report page missing: ' + e.message); }
 
 // ---------- result ----------
