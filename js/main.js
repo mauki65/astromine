@@ -1,6 +1,7 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
 import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, decodeRows } from './pipeline.js';
 import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
+import { openAbout } from './about.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
 
 const $ = s => document.querySelector(s);
@@ -522,6 +523,7 @@ function renderDetail(o) {
     <div class="row"><div><h2>${esc(shortName(o.name))}</h2>
       <span class="badge" title="Rank uses the best launch window">${icon(SHAPE[T.key], T.color)} ${T.label} · #${o.rank.toLocaleString()}</span><span class="verdict ${ev.profit > 0 ? 'pos' : 'neg'}">${ev.profit > 0 ? 'Worth mining' : 'Not worth it'}</span></div>
       <button class="icon" id="close" title="Close">✕</button></div>
+    <button class="aboutbtn" id="aboutbtn">About this object — origin, photo &amp; story →</button>
   </div>
   <div class="db">
     <div class="muted">Expected profit per mission</div>
@@ -566,6 +568,7 @@ function renderDetail(o) {
     <button class="link" id="focus">Centre on map</button> · <a class="link" href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${sb}" target="_blank" rel="noopener">JPL record ↗</a>
   </div>`;
   $('#close').onclick = () => select(null);
+  $('#aboutbtn').onclick = () => openAbout(o);
   $('#focus').onclick = () => focus(o);
 }
 
@@ -648,7 +651,7 @@ $('#about').innerHTML = `
 
 setInterval(() => { if (!st.playing && ranked.some(o => o.tier.key === 'mythic' && st.tiers.has('mythic'))) draw(); }, 50);
 window.addEventListener('resize', resize);
-window.addEventListener('keydown', e => { if (e.key === 'Escape') select(null); });
+window.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const m = document.getElementById('about-modal'); if (m?.innerHTML) m.innerHTML = ''; else select(null); });
 if (innerWidth < 860) { $('#mission').classList.add('collapsed'); $('#collapse-left').textContent = '+'; }
 renderSettings(); renderFilters(); updateDate(); resize(); fit();
 load();
