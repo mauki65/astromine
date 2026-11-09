@@ -1,5 +1,5 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
-import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, decodeRows } from './pipeline.js';
+import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert } from './pipeline.js';
 import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
 import { openAbout, photoOf, credit } from './about.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
@@ -9,8 +9,8 @@ const OZT = 0.0311034768;
 
 // ---------- state ----------
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('astromine.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('astromine.' + k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { const v = localStorage.getItem('spacemine.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('spacemine.' + k, JSON.stringify(v)); } catch {} },
 };
 const S = { ...DEFAULTS, ...store.get('settings', {}) };
 delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
@@ -138,7 +138,7 @@ function strokePath(pts, O) {
 }
 
 // Tier shapes (not only colours) so tiers stay distinguishable for colour-blind viewers.
-export const SHAPE = { common: 'dot', uncommon: 'square', rare: 'circle', epic: 'triangle', legendary: 'diamond', mythic: 'star' };
+const SHAPE = { common: 'dot', uncommon: 'square', rare: 'circle', epic: 'triangle', legendary: 'diamond', mythic: 'star' };
 function shapePath(kind, x, y, r) {
   ctx.beginPath();
   if (kind === 'triangle') { const h = r * 1.25; ctx.moveTo(x, y - h); ctx.lineTo(x + h * 0.95, y + h * 0.6); ctx.lineTo(x - h * 0.95, y + h * 0.6); ctx.closePath(); }

@@ -5,7 +5,7 @@ import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { PRICE_BOUNDS } from '../js/pipeline.js';
 
 const DATA = new URL('../data/', import.meta.url);
-const UA = { 'User-Agent': 'astromine-data-bot (github actions)' };
+const UA = { 'User-Agent': 'spacemine-data-bot (github actions)' };
 await mkdir(DATA, { recursive: true });
 
 const r6 = v => (v === null || v === '' || v === undefined) ? null : +(+v).toPrecision(7);

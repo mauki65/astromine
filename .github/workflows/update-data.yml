@@ -35,7 +35,7 @@ jobs:
         run: |
           mkdir -p data
           for f in asteroids comets nhats lambert prices close-approaches history taxonomy; do
-            curl -fsSL --retry 2 "https://mauki65.github.io/astromine/data/$f.json" -o "data/$f.json.tmp" \
+            curl -fsSL --retry 2 "https://mauki65.github.io/spacemine/data/$f.json" -o "data/$f.json.tmp" \
               && mv "data/$f.json.tmp" "data/$f.json" || echo "no previous $f.json"
           done
       - run: node scripts/fetch-data.mjs

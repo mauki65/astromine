@@ -34,11 +34,11 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const html = `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} · Astromine</title>
+<title>${esc(title)} · Spacemine</title>
 <meta name="description" content="${esc(desc)}">
-<link rel="canonical" href="https://mauki65.github.io/astromine/report/">
+<link rel="canonical" href="https://mauki65.github.io/spacemine/report/">
 <meta property="og:type" content="article"><meta property="og:title" content="${esc(title)}">
-<meta property="og:description" content="${esc(desc)}"><meta property="og:image" content="https://mauki65.github.io/astromine/assets/og.png">
+<meta property="og:description" content="${esc(desc)}"><meta property="og:image" content="https://mauki65.github.io/spacemine/assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,7 @@ const html = `<!doctype html>
   .cta{display:inline-block;margin-top:14px;border:1px solid var(--accent);color:var(--accent)!important;border-radius:6px;padding:7px 14px;text-decoration:none}
 </style>
 </head><body>
-<header class="top"><a class="brand" href="../" style="color:inherit;text-decoration:none"><span class="mark"></span>ASTROMINE</a>
+<header class="top"><a class="brand" href="../" style="color:inherit;text-decoration:none"><span class="mark"></span>SPACEMINE</a>
 <nav class="tabs"><a href="../" class="tabl">Map</a><a href="./" class="tabl on">Report</a></nav></header>
 <main class="page report" id="report" style="position:static">${main}
 </main>
@@ -64,8 +64,8 @@ await mkdir(new URL('report/', ROOT), { recursive: true });
 await writeFile(new URL('report/index.html', ROOT), html);
 await writeFile(new URL('sitemap.xml', ROOT), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://mauki65.github.io/astromine/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
-  <url><loc>https://mauki65.github.io/astromine/report/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
+  <url><loc>https://mauki65.github.io/spacemine/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
+  <url><loc>https://mauki65.github.io/spacemine/report/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
 </urlset>
 `);
 const top = ranked.find(o => !o.comet);

@@ -6,7 +6,7 @@ const KMS = 1731.456837;           // AU/day → km/s
 const D2R = Math.PI / 180;
 
 // 3-D Keplerian state from elements
-export function kepler(el) {
+function kepler(el) {
   const { a, e, i, om, w } = el;
   const I = i * D2R, O = om * D2R, W = w * D2R;
   const cO = Math.cos(O), sO = Math.sin(O), cw = Math.cos(W), sw = Math.sin(W), ci = Math.cos(I), si = Math.sin(I);

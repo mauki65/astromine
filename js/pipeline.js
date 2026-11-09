@@ -15,7 +15,7 @@ export function decodeRows(d) {
   return { ...d, rows };
 }
 // lambert.json stores each trajectory as a compact array
-export const LAM_FIELDS = ['t0', 'tof', 'tofRet', 't1', 't2', 'vinf', 'arr', 'd3', 'vEntry', 'total', 'stay', 'at', 'ver'];
+const LAM_FIELDS = ['t0', 'tof', 'tofRet', 't1', 't2', 'vinf', 'arr', 'd3', 'vEntry', 'total', 'stay', 'at', 'ver'];
 export const LAM_VERSION = 2; // bump when trajectory physics change → everything is recomputed
 export function decodeLambert(l) {
   if (!l || !l.fields) return l;
@@ -52,7 +52,7 @@ function tkeys(name) {
   return k;
 }
 
-export function keysOf(o) {
+function keysOf(o) {
   const num = o.name.match(/^(\d+)\s/)?.[1], prov = o.name.match(/\(([^)]+)\)/)?.[1];
   return [num, prov, shortName(o.name)].filter(Boolean);
 }

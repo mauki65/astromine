@@ -1,8 +1,8 @@
-# Astromine — which asteroids are worth mining?
+# Spacemine — which asteroids are worth mining?
 
-**Live:** https://mauki65.github.io/astromine/ · **Monthly-style report (auto-updated):** https://mauki65.github.io/astromine/report/
+**Live:** https://mauki65.github.io/spacemine/ · **Monthly-style report (auto-updated):** https://mauki65.github.io/spacemine/report/
 
-![Astromine map](assets/screenshot.png)
+![Spacemine map](assets/screenshot.png)
 
 An interactive map of 50,000+ real asteroids and comets from Venus to Saturn, ranked **Common → Uncommon → Rare → Epic → Legendary → Mythic** by expected profit per mining mission. Plug in your own launch costs, spacecraft and risk, launch from Earth or the Moon, and watch the whole solar system re-rank.
 

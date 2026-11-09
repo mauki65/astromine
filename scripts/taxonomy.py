@@ -22,7 +22,7 @@ def fresh():
 
 def download(kind):
     path = f'/tmp/bft-{kind}.parquet'
-    req = urllib.request.Request(URL.format(kind), headers={'User-Agent': 'astromine-data-bot'})
+    req = urllib.request.Request(URL.format(kind), headers={'User-Agent': 'spacemine-data-bot'})
     with urllib.request.urlopen(req, timeout=600) as r, open(path, 'wb') as f:
         while chunk := r.read(1 << 20):
             f.write(chunk)

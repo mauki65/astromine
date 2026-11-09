@@ -13,7 +13,7 @@ const ev = o => `<span class="evd" style="background:${EVIDENCE[o.evidence].colo
 const pct = (a, b) => b ? ((a / b - 1) * 100) : null;
 const chg = v => v == null ? '<span class="muted">–</span>' : `<span class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
 
-export function titleFor(date = new Date()) {
+function titleFor(date = new Date()) {
   return `Asteroid mining launch windows — ${date.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
 }
 

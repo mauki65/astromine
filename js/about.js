@@ -107,7 +107,7 @@ const COMPOSITION = {
   V: 'Its surface is basalt — solidified lava — a sign it came from a body large enough to melt and form a crust.',
   K: 'A comet nucleus is a loose mix of ice, dust and organic compounds, often less dense than water. Near the Sun its ices turn to gas and form the coma and tail.',
 };
-export function originStory(o) {
+function originStory(o) {
   const p = [], cls = o.class || '', a = o.a, e = o.e, i = o.i, T = tisserand(a, e, i);
   const P = Math.pow(a, 1.5);
   if (o.comet) {
@@ -144,7 +144,7 @@ export function originStory(o) {
   return p;
 }
 
-export function facts(o) {
+function facts(o) {
   const f = [];
   f.push(['Size', `${o.dEst ? '~' : ''}${o.D >= 1 ? o.D.toPrecision(3) + ' km' : Math.round(o.D * 1000) + ' m'} — ${sizeLike(o.D)}`]);
   f.push(['Year length', `${Math.pow(o.a, 1.5).toFixed(2)} Earth years`]);
