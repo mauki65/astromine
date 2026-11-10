@@ -35,8 +35,11 @@ jobs:
         run: |
           mkdir -p data
           for f in asteroids comets nhats lambert prices close-approaches history taxonomy; do
-            curl -fsSL --retry 2 "https://astromine.live/data/$f.json" -o "data/$f.json.tmp" \
-              && mv "data/$f.json.tmp" "data/$f.json" || echo "no previous $f.json"
+            ok=
+            for base in https://astromine.live http://astromine.live https://mauki65.github.io/astromine; do
+              curl -fsSL --retry 2 "$base/data/$f.json" -o "data/$f.json.tmp" && mv "data/$f.json.tmp" "data/$f.json" && ok=1 && break
+            done
+            [ -n "$ok" ] || echo "no previous $f.json"
           done
       - run: node scripts/fetch-data.mjs
       - name: Composition and sizes from SsODNet (weekly)
