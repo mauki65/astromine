@@ -36,9 +36,9 @@ const html = `<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · Astromine</title>
 <meta name="description" content="${esc(desc)}">
-<link rel="canonical" href="https://mauki65.github.io/astromine/report/">
+<link rel="canonical" href="https://astromine.live/report/">
 <meta property="og:type" content="article"><meta property="og:title" content="${esc(title)}">
-<meta property="og:description" content="${esc(desc)}"><meta property="og:image" content="https://mauki65.github.io/astromine/assets/og.png">
+<meta property="og:description" content="${esc(desc)}"><meta property="og:image" content="https://astromine.live/assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,8 +64,8 @@ await mkdir(new URL('report/', ROOT), { recursive: true });
 await writeFile(new URL('report/index.html', ROOT), html);
 await writeFile(new URL('sitemap.xml', ROOT), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://mauki65.github.io/astromine/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
-  <url><loc>https://mauki65.github.io/astromine/report/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
+  <url><loc>https://astromine.live/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
+  <url><loc>https://astromine.live/report/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq></url>
 </urlset>
 `);
 const top = ranked.find(o => !o.comet);

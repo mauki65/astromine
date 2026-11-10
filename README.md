@@ -1,6 +1,6 @@
 # Astromine — which asteroids are worth mining?
 
-**Live:** https://mauki65.github.io/astromine/ · **Monthly-style report (auto-updated):** https://mauki65.github.io/astromine/report/
+**Live:** https://astromine.live/ · **Monthly-style report (auto-updated):** https://astromine.live/report/
 
 ![Astromine map](assets/screenshot.png)
 
