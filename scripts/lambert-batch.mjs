@@ -54,7 +54,7 @@ for (const o of todo) {
 for (const o of todo.slice(done)) { const r = prev.list[o.name]; if (r?.ver === LAM_VERSION) list[o.name] = r; }
 const remaining = todo.length - done;
 await writeFile(new URL('data/lambert.json', ROOT), JSON.stringify(encodeLambert({
-  generated: new Date().toISOString(), stayDays, source: 'Lambert-optimised round trips (Spacemine hourly job)',
+  generated: new Date().toISOString(), stayDays, source: 'Lambert-optimised round trips (Astromine hourly job)',
   coverage: { candidates: cand.size, computed: Object.keys(list).length, pending: remaining },
 }, list)));
 console.log(`lambert: computed ${done} in ${((Date.now() - t0) / 1000).toFixed(0)}s, total ${Object.keys(list).length}/${cand.size}, pending ${remaining}`);

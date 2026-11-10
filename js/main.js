@@ -9,8 +9,8 @@ const OZT = 0.0311034768;
 
 // ---------- state ----------
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('spacemine.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('spacemine.' + k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { const v = localStorage.getItem('astromine.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('astromine.' + k, JSON.stringify(v)); } catch {} },
 };
 const S = { ...DEFAULTS, ...store.get('settings', {}) };
 delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
