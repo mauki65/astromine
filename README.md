@@ -14,12 +14,14 @@ An interactive map of 50,000+ real asteroids and comets from Venus to Saturn, ra
 | Earth close approaches | NASA/JPL Close-Approach Data | hourly |
 | Au, Ag, Pt, Pd, Cu prices | gold-api.com | every minute in the browser |
 | Rh, Ir, Ru prices | Umicore | hourly check (published daily) |
-| Exact launch windows | Lambert solver, in the browser | when you open an object |
+| Exact launch windows | Lambert solver, run by the job for every mining candidate | hourly |
+| Composition classes and sizes (gap-filling) | SsODNet ssoBFT (Berthier et al. 2023, A&A 671, A151) | weekly |
+| Photos and object summaries | Wikipedia / Wikimedia Commons (per-image credits) | on demand |
 
 Positions are recomputed every second from Keplerian elements.
 
 ## What's estimated
-Composition comes from asteroid type → meteorite analogues (only Ryugu, Bennu, Itokawa, Eros, Vesta and Psyche have been visited). Every object carries a data-quality badge: **Confirmed**, **Measured**, **Estimated** or **Guess**. Sizes from brightness can be off by ×2. This is an exploration tool, not investment advice.
+Composition comes from asteroid type → meteorite analogues (only Ryugu, Bennu, Itokawa, Eros, Vesta and Psyche have been visited). Every object carries a data-quality badge: **Confirmed**, **Measured**, **Estimated** or **Guess**. Sizes from brightness can be off by ×2. Water is valued at an assumed $1,000/kg as rocket propellant in Earth orbit — no such market exists yet, and it drives most of the profit for water-rich asteroids. This is an exploration tool, not investment advice.
 
 ## How it runs
 Static site on GitHub Pages. A GitHub Action (`.github/workflows/update-data.yml`) runs `scripts/fetch-data.mjs`, `scripts/lambert-batch.mjs` and `scripts/report.mjs` every hour and deploys the site with fresh data straight to GitHub Pages — data is not committed, so the repo stays small. No servers, no API keys.

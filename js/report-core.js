@@ -92,7 +92,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   </div>
 
   <h2>About this report</h2>
-  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database; round-trip trajectories are computed hourly for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Ag, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for the rest. This is an exploration tool, not investment advice.</p>`;
+  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database, with gaps filled from SsODNet (Berthier et al. 2023); round-trip trajectories are computed hourly for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Ag, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for the rest. This is an exploration tool, not investment advice.</p>`;
   return { title: titleFor(), desc, main };
 }
 

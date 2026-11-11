@@ -544,6 +544,8 @@ function renderDetail(o) {
       <td title="Chance it is present at this grade">${Math.round(i.chance * 100)}%</td><td title="Grade">${grade(i.grade)}</td><td title="Returned">${i.taken > 0 ? mass(i.taken) : '–'}</td><td title="Expected value">${i.value > 0 ? money(i.value) : '–'}</td></tr>`).join('')}
     </tbody></table>
     <div class="note">Chance × grade × recovery × price. Cargo filled with the most valuable material first, up to ${S.returnCap} t.</div>
+    ${(() => { const tot = ev.items.reduce((a, i) => a + (i.value > 0 ? i.value : 0), 0), w = ev.items.find(i => i.k === 'water')?.value || 0;
+      return tot > 0 && w / tot > 0.5 ? `<div class="note"><b>Key assumption:</b> ≈${Math.round(w / tot * 100)}% of this revenue is water, valued at $${Math.round(ev.items.find(i => i.k === 'water').price).toLocaleString('en-US')}/kg as rocket propellant delivered in Earth orbit — no such market exists yet.</div>` : ''; })()}
     <h3>Economics</h3>
     <div class="kv">
       <span>Expected revenue (after ${S.risk}% risk)</span><span class="pos">${money(ev.expRevenue)}</span>
@@ -632,6 +634,8 @@ $('#about').innerHTML = `
 <li><b>Orbits</b> — NASA/JPL Small-Body Database: all near-Earth asteroids down to ~25 m, every body larger than 12 km out to ~11 AU (Saturn), the brighter Jupiter Trojans and the Centaurs, and every asteroid with a measured spectral type. Catalogue refreshed hourly by a GitHub Action. Positions are recomputed every second in your browser, so the map shows where everything is right now.</li>
 <li><b>Comets</b> (optional layer) — short-period comets (Jupiter-family, Encke-, Chiron- and Halley-type) from the same database; composition from Rosetta’s measurements of comet 67P (~30% water ice). Diameters are often unknown, so many are assumed at 2 km. Ranked against the asteroid tiers, so turning them on never re-ranks asteroids.</li>
 <li><b>Close approaches</b> — JPL Close-Approach API, next 120 days. Flagged as launch windows.</li>
+<li><b>Composition classes and sizes</b> — where NASA has none, from SsODNet’s Best-Fit Table (Berthier et al. 2023, A&amp;A 671, A151: spectra and Gaia/SDSS survey colours), refreshed weekly.</li>
+<li><b>Photos and object summaries</b> — Wikipedia and Wikimedia Commons (credited on each photo); only real spacecraft or telescope images.</li>
 <li><b>Prices</b> — Au/Ag/Pt/Pd/Cu refresh every minute in your browser (gold-api.com); Rh/Ir/Ru are checked hourly (Umicore publishes once per business day); the rest are reference values.</li>
 </ul>
 <h2>How much to trust each number</h2>
