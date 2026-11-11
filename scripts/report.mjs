@@ -58,6 +58,7 @@ const html = `<!doctype html>
 <main class="page report" id="report" style="position:static">${main}
 </main>
 <script type="module" src="../js/report-live.js"></script>
+<script data-goatcounter="https://mauki.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>`;
 
 await mkdir(new URL('report/', ROOT), { recursive: true });
