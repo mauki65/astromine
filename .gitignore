@@ -3,3 +3,5 @@ data/*
 !data/prices.json
 report/
 sitemap.xml
+about/
+llms.txt
