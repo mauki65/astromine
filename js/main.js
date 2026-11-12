@@ -1,6 +1,6 @@
-import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate } from './model.js';
-import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert } from './pipeline.js';
-import { body, fixedLaunch, depLEO, depMoon } from './lambert.js';
+import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate, waterPrice } from './model.js';
+import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, lamDv } from './pipeline.js';
+import { body, fixedLaunch, entrySpeed } from './lambert.js';
 import { openAbout, photoOf, credit } from './about.js';
 import { GUIDE_HTML } from './guide.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
@@ -13,14 +13,16 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('astromine.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem('astromine.' + k, JSON.stringify(v)); } catch {} },
 };
-const S = { ...DEFAULTS, ...store.get('settings', {}) };
-delete S.costMoon; if (!(S.moonPct >= 0)) S.moonPct = DEFAULTS.moonPct;
+// Saved settings from before the Nov 2026 model fix (v2) used other defaults – keep only the launch choices.
+const SV = 2, saved = store.get('settings', {});
+const S = { ...DEFAULTS, ...(saved.v === SV ? saved : { base: saved.base || DEFAULTS.base, launchMode: saved.launchMode || DEFAULTS.launchMode }), v: SV };
 const st = {
   jd: jdNow(), live: true, playing: false, speed: 1, frame: store.get('frame', 'earth'),
   view: { cx: 0, cy: 0, scale: 1 }, sel: null, hover: null,
   tiers: new Set(TIERS.map(t => t.key)), comets: store.get('comets', false), asteroids: store.get('asteroids', true), group: 'all', onlyProfit: false, query: '',
 };
 let objs = [], ranked = [], prices = {}, priceMeta = {}, overrides = store.get('overrides', {});
+delete overrides.water;
 let posX, posY, pl, cad = new Map(), meta = {};
 
 // ---------- formatting ----------
@@ -32,7 +34,7 @@ const money = v => {
   if (a >= 1e3) return s + '$' + (a / 1e3).toFixed(1) + 'k';
   return s + '$' + a.toFixed(a < 10 ? 2 : 0);
 };
-const mass = kg => kg >= 1e12 ? (kg / 1e12).toPrecision(3) + ' Gt' : kg >= 1e9 ? (kg / 1e9).toPrecision(3) + ' Mt' : kg >= 1e3 ? (kg / 1e3).toPrecision(3) + ' t' : kg.toPrecision(3) + ' kg';
+const mass = kg => kg >= 1e12 ? (kg / 1e12).toPrecision(3) + ' Gt' : kg >= 1e9 ? (kg / 1e9).toPrecision(3) + ' Mt' : kg >= 1e6 ? Math.round(kg / 1e3).toLocaleString('en-US') + ' t' : kg >= 1e3 ? (kg / 1e3).toPrecision(3) + ' t' : kg.toPrecision(3) + ' kg';
 const grade = g => g >= 0.001 ? +(g * 100).toPrecision(2) + ' %' : +(g * 1e6).toPrecision(2) + ' ppm';
 const dist = km => km >= 1 ? km.toPrecision(3) + ' km' : Math.round(km * 1000) + ' m';
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -364,6 +366,7 @@ const FIELDS = [
   ['costEarth', 'Earth → LEO launch ($/kg)'],
   ['moonPct', 'Moon → lunar orbit (% of Earth)', 'moon'],
   ['buildCost', 'Spacecraft build ($M)'],
+  ['trips', 'Trips per spacecraft'],
   ['opsCost', 'Operations ($M / year)'],
   ['procCost', 'Processing ($ / t ore)'],
   ['h', 'Spacecraft'],
@@ -394,7 +397,7 @@ function renderSettings() {
 segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSettings(); recompute(); resetLambert(); });
 segment('#launch', S.launchMode, v => { S.launchMode = v; store.set('settings', S); resetLambert(); });
 function resetLambert() { for (const o of objs) if (o.lamDate || o.dvDate) { o.dvDate = null; o.lamDate = null; } if (st.sel) optimise(st.sel); recompute(); }
-$('#reset').onclick = () => { Object.assign(S, DEFAULTS); store.set('settings', S); segment('#base', S.base); segment('#launch', S.launchMode); resetLambert(); renderSettings(); recompute(); };
+$('#reset').onclick = () => { Object.assign(S, DEFAULTS, { v: SV }); store.set('settings', S); segment('#base', S.base); segment('#launch', S.launchMode); resetLambert(); renderSettings(); recompute(); };
 $('#collapse-left').onclick = () => { const p = $('#mission'); p.classList.toggle('collapsed'); $('#collapse-left').textContent = p.classList.contains('collapsed') ? '+' : '–'; };
 
 function segment(sel, val, cb) {
@@ -492,22 +495,25 @@ function optimise(o, delay = 30) {
     const r = fixedLaunch(earth, ast, jd, { stayDays: S.stayMonths * 30.44, base: S.base });
     o.lamBusy = false;
     o.lamDate = r ? { ...r, key } : { none: true, key };
-    o.dvDate = r ? { ...o.dv, leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3, transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert-date' } : null;
+    o.dvDate = r ? { ...o.dv, ...lamDv(r), src: 'lambert-date' } : null;
     recompute();
   }, delay);
 }
-const rt = d => (S.base === 'moon' ? d.moon : d.leo) + d.dvArr + d.ret;
+const rt = (d, depot) => (S.base === 'moon' ? d.moon : d.leo) + d.dvArr + (depot ? d.retDepot : d.ret);
 function lamText(o) {
   const d = o.dv, nh = d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : '';
-  const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. Atmospheric entry at ${Math.min(12, r.vEntry).toFixed(1)} km/s${r.vEntry > 12.05 ? ` (after a braking burn from ${r.vEntry.toFixed(1)})` : ''}.`;
+  const depot = (o.evDate || o.ev).to === 'depot';
+  const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. ${depot
+    ? `Captured at the depot near the Moon (arrives at ${Math.sqrt(Math.max(0, r.vEntry ** 2 - entrySpeed(0) ** 2)).toFixed(1)} km/s).`
+    : `Capsule enters the atmosphere at ${Math.min(12, r.vEntry).toFixed(1)} km/s${r.vEntry > 12.05 ? ` (after a braking burn from ${r.vEntry.toFixed(1)})` : ''}.`}`;
   if (S.launchMode === 'date') {
     if (o.Q > 6 || o.comet) return 'Fixed-date launches are only computed for objects within 6 AU (not comets).';
     if (o.lamBusy || !o.lamDate) return `Computing a launch on ${jdDate(st.jd)}…`;
     if (o.lamDate.none) return `No round trip found for a launch on ${jdDate(st.jd)}.`;
-    return `<b>Launch on map date</b> (${rt(o.dvDate || o.dv).toFixed(2)} km/s total) — ${legs(o.lamDate)}${o.lam ? ` Best window instead: ${jdDate(o.lam.t0)} at ${rt(o.dv).toFixed(2)} km/s.` : ''} <span class="muted">Rank and tier stay based on the best window.</span>`;
+    return `<b>Launch on map date</b> (${rt(o.dvDate || o.dv, depot).toFixed(2)} km/s total) — ${legs(o.lamDate)}${o.lam ? ` Best window instead: ${jdDate(o.lam.t0)} at ${rt(o.dv, depot).toFixed(2)} km/s.` : ''} <span class="muted">Rank and tier stay based on the best window.</span>`;
   }
   const stayNote = o.lam && Math.round(S.stayMonths * 30.44) !== o.lam.stay ? ` <span class="muted">(windows computed for a ${Math.round(o.lam.stay / 30.44)}-month stay)</span>` : '';
-  if (o.lam) return `<b>Best launch window</b> (exact trajectory, ${rt(d).toFixed(2)} km/s round trip) — ${legs(o.lam)}${nh}${stayNote}`;
+  if (o.lam) return `<b>Best launch window</b> (exact trajectory, ${rt(d, depot).toFixed(2)} km/s round trip) — ${legs(o.lam)}${nh}${stayNote}`;
   if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}). Exact trajectory pending in the hourly job.`;
   return 'Δv is a Hohmann-transfer <b>estimate</b> — not a mining candidate at default costs, so no exact trajectory was computed.';
 }
@@ -528,7 +534,7 @@ function renderDetail(o) {
     <button class="aboutbtn" id="aboutbtn">About this object — origin, photo &amp; story →</button>
   </div>
   <div class="db">
-    <div class="muted">Expected profit per mission</div>
+    <div class="muted">Expected profit per trip</div>
     <div class="big ${ev.profit > 0 ? 'pos' : 'neg'}">${money(ev.profit)}</div>
     <div class="muted" style="margin-bottom:12px">ROI ${(ev.roi * 100).toFixed(0)} % · ${ev.years.toFixed(1)} yr mission</div>
     ${ca}
@@ -544,22 +550,23 @@ function renderDetail(o) {
     ${ev.items.filter(i => i.k !== 'Fe' || i.taken > 0).map(i => `<tr><td><span class="dot" style="background:${MATERIALS[i.k].color}"></span>${MATERIALS[i.k].name}<div class="meter"><i style="width:${(i.value / maxV * 100).toFixed(1)}%;background:${MATERIALS[i.k].color}"></i></div></td>
       <td title="Chance it is present at this grade">${Math.round(i.chance * 100)}%</td><td title="Grade">${grade(i.grade)}</td><td title="Returned">${i.taken > 0 ? mass(i.taken) : '–'}</td><td title="Expected value">${i.value > 0 ? money(i.value) : '–'}</td></tr>`).join('')}
     </tbody></table>
-    <div class="note">Chance × grade × recovery × price. Cargo filled with the most valuable material first, up to ${S.returnCap} t.</div>
-    ${(() => { const tot = ev.items.reduce((a, i) => a + (i.value > 0 ? i.value : 0), 0), w = ev.items.find(i => i.k === 'water')?.value || 0;
-      return tot > 0 && w / tot > 0.5 ? `<div class="note"><b>Key assumption:</b> ≈${Math.round(w / tot * 100)}% of this revenue is water, valued at $${Math.round(ev.items.find(i => i.k === 'water').price).toLocaleString('en-US')}/kg as rocket propellant delivered in Earth orbit — no such market exists yet.</div>` : ''; })()}
+    <div class="note">${ev.to === 'depot'
+      ? `Sold at a fuel depot near the Moon (Earth–Moon L1). Water is valued at <b>$${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg</b> — what it would cost to launch the same water there from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'}. No such market exists yet.`
+      : `Brought to Earth in a heat-shielded capsule and sold at market prices.`} Chance × grade × recovery × price, most valuable first, up to ${S.returnCap} t.</div>
     <h3>Economics</h3>
     <div class="kv">
       <span>Expected revenue (after ${S.risk}% risk)</span><span class="pos">${money(ev.expRevenue)}</span>
       <span>Launch (${mass(ev.launchMass)} @ $${(S.base === 'moon' ? S.costEarth * S.moonPct / 100 : S.costEarth).toLocaleString()}/kg)</span><span class="neg">−${money(ev.costLaunch).slice(0)}</span>
-      <span>Spacecraft + operations</span><span class="neg">−${money(ev.costFixed)}</span>
+      <span>Spacecraft (1/${ev.trips} of $${S.buildCost.toLocaleString()}M) + operations</span><span class="neg">−${money(ev.costFixed)}</span>
       <span>Processing ${mass(ev.ore)} ore</span><span class="neg">−${money(ev.costProc)}</span>
       <span>Return fuel</span><span>${ev.useIsru ? 'made from asteroid water' : mass(ev.propRet) + ' carried'}</span>
+      ${ev.shield ? `<span>Heat shield for Earth entry</span><span>${mass(ev.shield)}</span>` : ''}
     </div>
     <h3>Getting there</h3>
     <div class="callout" id="lam">${lamText(o)}</div>
     <div class="kv">
       <span>Δv from ${S.base === 'moon' ? 'low lunar orbit' : 'low Earth orbit'}</span><span>${ev.dvOut.toFixed(2)} km/s</span>
-      <span>Δv to return</span><span>${ev.dvRet.toFixed(2)} km/s</span>
+      <span>Δv to return (${ev.to === 'depot' ? 'to the depot' : 'to Earth'})</span><span>${ev.dvRet.toFixed(2)} km/s</span>
       <span>${o.lam?.tof ? 'Trip out / back' : 'One-way trip'}</span><span>${o.lam?.tof ? Math.round(o.lam.tof) + ' d / ' + Math.round(o.lam.tofRet) + ' d' : (o.dv.transferYr * 12).toFixed(0) + ' months'}</span>
       <span>Diameter</span><span>${o.dEst ? '~' : ''}${dist(o.D)}${o.dEst ? ' (from brightness)' : ' (measured)'}</span>
       <span>Radar</span><span>${o.radar ? `observed · ${o.radar} measurements` : 'not observed'}</span>
@@ -585,18 +592,19 @@ function renderDetail(o) {
 function renderMaterials() {
   const tbl = $('#mat-table'); if (!tbl) return;
   const rows = ORDER.map(k => {
-    const M = MATERIALS[k], m = priceMeta[k] || {}, ov = overrides[k] > 0;
-    const src = ov ? '<span class="src">your price</span>' : m.live ? '<span class="src s-live">live</span>' : /reference|assumption/i.test(m.source || '') ? '<span class="src">reference</span>' : '<span class="src s-daily">daily</span>';
-    const p = prices[k] || 0;
+    const W = k === 'water', M = MATERIALS[k], ov = overrides[k] > 0;
+    const m = W ? { source: `set by launch cost: launching water from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'} to the Earth–Moon L1 depot` } : priceMeta[k] || {};
+    const src = W ? '<span class="src">derived</span>' : ov ? '<span class="src">your price</span>' : m.live ? '<span class="src s-live">live</span>' : /reference/i.test(m.source || '') ? '<span class="src">reference</span>' : '<span class="src s-daily">daily</span>';
+    const p = W ? waterPrice(S) : prices[k] || 0;
     const best = Object.entries(CLASSES).sort((a, b) => (b[1].g[k] || 0) - (a[1].g[k] || 0))[0];
     const perOz = M.group === 'pgm' ? `<div class="muted">$${(p * OZT).toLocaleString(undefined, { maximumFractionDigits: 0 })}/ozt</div>` : '';
     return `<tr><td><span class="dot" style="background:${M.color}"></span><b>${M.name}</b> <span class="muted">${k === 'water' ? 'H₂O' : k}</span></td>
       <td class="num">$${p.toLocaleString(undefined, { maximumFractionDigits: p < 100 ? 2 : 0 })}/kg${perOz}</td>
       <td>${src}<div class="muted" style="font-size:11px;margin-top:4px">${esc(m.source || '')}${m.asOf ? ' · ' + esc(String(m.asOf).slice(0, 16).replace('T', ' ')) : ''}</div></td>
-      <td class="num">${M.supply >= 1e6 ? (M.supply / 1e6).toLocaleString() + ' Mt' : M.supply.toLocaleString() + ' t'}</td>
+      <td class="num">${!M.supply ? '<span class="muted">no market yet</span>' : M.supply >= 1e6 ? (M.supply / 1e6).toLocaleString() + ' Mt' : M.supply.toLocaleString() + ' t'}</td>
       <td>${best[0]}-type · ${grade(best[1].g[k])}</td>
       <td class="muted">${M.uses}</td>
-      <td><input type="number" min="0" step="any" placeholder="auto" data-k="${k}" value="${ov ? overrides[k] : ''}"></td></tr>`;
+      <td>${W ? '<span class="muted">change launch cost</span>' : `<input type="number" min="0" step="any" placeholder="auto" data-k="${k}" value="${ov ? overrides[k] : ''}">`}</td></tr>`;
   }).join('');
   tbl.innerHTML = `<thead><tr><th>Material</th><th style="text-align:right">Price</th><th>Source</th><th style="text-align:right">World supply /yr</th><th>Richest asteroid type</th><th>Used for</th><th>Override $/kg</th></tr></thead><tbody>${rows}</tbody>`;
   tbl.querySelectorAll('input').forEach(inp => inp.onchange = () => {
@@ -606,11 +614,11 @@ function renderMaterials() {
   $('#class-table').innerHTML = `<thead><tr><th>Type</th><th>Analogue</th><th style="text-align:right">Value / t (all)</th><th style="text-align:right">Precious metals / t</th><th style="text-align:right">Water / t</th><th>Count on map</th></tr></thead><tbody>` +
     Object.entries(CLASSES).map(([c, C]) => {
       let all = 0, pgm = 0;
-      for (const k of ORDER) { const v = (C.g[k] || 0) * 1000 * (prices[k] || 0); all += v; if (MATERIALS[k].group === 'pgm') pgm += v; }
+      for (const k of ORDER) { const v = (C.g[k] || 0) * 1000 * (k === 'water' ? waterPrice(S) : prices[k] || 0); all += v; if (MATERIALS[k].group === 'pgm') pgm += v; }
       const n = objs.filter(o => o.cls === c).length;
-      return `<tr><td><b>${C.label}</b></td><td class="muted">${C.analog}</td><td class="num">${money(all)}</td><td class="num">${money(pgm)}</td><td class="num">${money((C.g.water || 0) * 1000 * (prices.water || 0))}</td><td class="num">${n.toLocaleString()}</td></tr>`;
+      return `<tr><td><b>${C.label}</b></td><td class="muted">${C.analog}</td><td class="num">${money(all)}</td><td class="num">${money(pgm)}</td><td class="num">${money((C.g.water || 0) * 1000 * waterPrice(S))}</td><td class="num">${n.toLocaleString()}</td></tr>`;
     }).join('') + '</tbody>';
-  $('#mat-status').innerHTML = `Gold, silver, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium are checked hourly against Umicore (published once per business day). Others are reference values — override them to run your own scenario.`;
+  $('#mat-status').innerHTML = `Gold, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium are checked hourly against Umicore (published once per business day). Others are reference values — override them to run your own scenario. Water has no market yet: its price follows your launch cost.`;
 }
 
 // ---------- status ----------

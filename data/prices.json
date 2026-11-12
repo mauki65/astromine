@@ -7,11 +7,6 @@
       "source": "gold-api.com spot",
       "asOf": "2026-11-07T19:10:37Z"
     },
-    "Ag": {
-      "usdPerKg": 1674.12,
-      "source": "gold-api.com spot",
-      "asOf": "2026-11-07T19:10:37Z"
-    },
     "Pt": {
       "usdPerKg": 49640.8,
       "source": "gold-api.com spot",
@@ -60,11 +55,6 @@
     "Fe": {
       "usdPerKg": 0.45,
       "source": "reference (pig iron, Earth market)",
-      "asOf": "2026-11"
-    },
-    "water": {
-      "usdPerKg": 1000,
-      "source": "assumption: value of propellant water delivered in cislunar space (no market yet)",
       "asOf": "2026-11"
     }
   }

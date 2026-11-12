@@ -14,7 +14,7 @@ export const MATERIALS = {
   Ni:    { name: 'Nickel',    group: 'metal', supply: 3600000, color: '#9fb7a5', uses: 'Stainless steel, battery cathodes' },
   Cu:    { name: 'Copper',    group: 'metal', supply: 23000000,color: '#d08a5b', uses: 'Wiring, motors, electronics' },
   Fe:    { name: 'Iron',      group: 'metal', supply: 1.3e9,   color: '#8d8d8d', uses: 'Steel – on Earth nearly worthless to import, in orbit a building material' },
-  water: { name: 'Water',     group: 'water', supply: 5000,    color: '#6fc3df', uses: 'Rocket propellant (H₂/O₂), life support, radiation shielding – sold in orbit' },
+  water: { name: 'Water',     group: 'water', supply: null,    color: '#6fc3df', uses: 'Rocket propellant (H₂/O₂), life support – sold at a fuel depot near the Moon' },
 };
 export const ORDER = ['Pt', 'Pd', 'Rh', 'Ir', 'Ru', 'Os', 'Au', 'Co', 'Ni', 'Cu', 'Fe', 'water'];
 
@@ -130,14 +130,16 @@ function deltaV(a, e, incDeg) {
   const transferYr = Math.min(8, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
   // return: leave the asteroid (≈ arrival burn, +0.3 margin) and, if Earth arrival is too fast for a 12 km/s entry, brake
   const ret = dvArr + 0.3 + Math.max(0, entrySpeed(vinf) - 12);
-  return { vinf, dvArr, leo, moon, ret, transferYr, src: 'estimate' };
+  // to the depot instead: no atmosphere to slow down in, so capture costs ≈ the arrival speed v∞
+  const retDepot = dvArr + 0.3 + vinf;
+  return { vinf, dvArr, leo, moon, ret, retDepot, transferYr, src: 'estimate' };
 }
 
 // NASA NHATS: round trip from a 400 km LEO, >=8 day stay, <=450 days, Earth return by
 // atmospheric entry. Rescale our Δv split so its total matches NASA's optimised value.
 export function applyNhats(o, n) {
   const d = o.dv, est = d.leo + d.dvArr + d.ret, k = n.dv / est, lm = d.leo - d.moon;
-  d.leo *= k; d.dvArr *= k; d.ret *= k; d.moon = Math.max(0.5, d.leo - lm);
+  d.leo *= k; d.dvArr *= k; d.ret *= k; d.retDepot *= k; d.moon = Math.max(0.5, d.leo - lm);
   d.transferYr = Math.max(30, (n.dur - 8) / 2) / 365.25;
   d.src = 'nhats'; d.nhats = n;
 }
@@ -155,65 +157,78 @@ export function prepare(row, F) {
 }
 
 // ---------- Economics ----------
+// Two ways to sell a cargo, and each mission takes the better one:
+//  • metals → Earth: a heat-shielded capsule enters the atmosphere, metals sell at market prices;
+//  • water  → fuel depot at Earth–Moon L1: there is no market yet, so water is worth what it would
+//    cost to launch the same water from Earth (or the Moon) to the depot – never more.
+// The spacecraft is reused for several trips; its build cost and launch are shared between them.
 export const DEFAULTS = {
-  base: 'earth', costEarth: 500, moonPct: 10, dryMass: 25, buildCost: 150, opsCost: 10,
-  isp: 380, oreCap: 500000, returnCap: 400, recovery: 60, procCost: 20, stayMonths: 9, risk: 20,
+  base: 'earth', costEarth: 500, moonPct: 10, dryMass: 25, buildCost: 1000, trips: 10, opsCost: 10,
+  isp: 380, oreCap: 50000, returnCap: 400, recovery: 60, procCost: 20, stayMonths: 9, risk: 20,
   isru: true, impact: true, launchMode: 'best',
 };
-
+const DEPOT = { fromLEO: 3.77, fromLLO: 0.64 };  // km/s to Earth–Moon L1
+const SHIELD = 0.15;                              // heat-shield capsule mass per kg of metal cargo
 const G0 = 9.80665;
-export function evaluate(o, S, prices) {
-  const C = CLASSES[o.cls];
-  const ve = S.isp * G0 / 1000;
-  const ore = Math.min(S.oreCap * 1000, o.mass * 0.5);      // kg processed
-  // materials available
+const ve = S => S.isp * G0 / 1000;
+const perKgLaunch = S => S.base === 'moon' ? S.costEarth * S.moonPct / 100 : S.costEarth;
+export function waterPrice(S) {
+  const viaEarth = S.costEarth * Math.exp(DEPOT.fromLEO / ve(S));
+  return S.base === 'moon' ? Math.min(viaEarth, perKgLaunch(S) * Math.exp(DEPOT.fromLLO / ve(S))) : viaEarth;
+}
+
+function route(o, S, prices, to) {
+  const C = CLASSES[o.cls], v = ve(S);
+  const ore = Math.min(S.oreCap * 1000, o.mass * 0.5);       // kg processed
   const items = [];
   for (const k of ORDER) {
     const grade = C.g[k] || 0; if (!grade) continue;
     const M = MATERIALS[k];
     const chance = Math.min(0.97, C.p[M.group] * (0.4 + 0.6 * o.conf));
     const kg = ore * grade * S.recovery / 100;
-    items.push({ k, grade, chance, kg, price: prices[k] || 0 });
+    const sells = to === 'depot' ? k === 'water' : k !== 'water';
+    items.push({ k, grade, chance, kg, price: sells ? (k === 'water' ? waterPrice(S) : prices[k] || 0) : 0 });
   }
-  const hasWater = (C.g.water || 0) > 0.02;
-  const useIsru = S.isru && hasWater;
-  const dry = S.dryMass * 1000;
-  const mrRet = Math.exp(o.dv.ret / ve) - 1;
-  if (useIsru) {  // water first becomes return propellant (upper bound: full payload)
+  const dvRet = to === 'depot' ? o.dv.retDepot : o.dv.ret;
+  const useIsru = S.isru && (C.g.water || 0) > 0.02;
+  const dry = S.dryMass * 1000, shieldK = to === 'earth' ? SHIELD : 0;
+  const mrRet = Math.exp(dvRet / v) - 1;
+  if (useIsru) {  // water first becomes return propellant (upper bound: full cargo)
     const w = items.find(i => i.k === 'water');
-    w.kg = Math.max(0, w.kg - (dry + S.returnCap * 1000) * mrRet);
+    w.kg = Math.max(0, w.kg - (dry + S.returnCap * 1000 * (1 + shieldK)) * mrRet);
   }
-  // fill return cap by expected value density
   let cap = S.returnCap * 1000, revenue = 0;
-  const sorted = [...items].sort((a, b) => b.price * b.chance - a.price * a.chance);
-  for (const it of sorted) {
-    const take = Math.min(it.kg, cap);
+  for (const it of [...items].sort((a, b) => b.price * b.chance - a.price * a.chance)) {
+    const take = it.price > 0 ? Math.min(it.kg, cap) : 0;
     it.taken = take; cap -= take;
-    const sup = MATERIALS[it.k].supply * 1000; // kg/yr
-    const realized = S.impact ? it.price / (1 + take / sup) : it.price;
-    it.realized = realized;
-    it.value = take * realized * it.chance;
+    const sup = MATERIALS[it.k].supply;
+    it.realized = S.impact && sup ? it.price / (1 + take / (sup * 1000)) : it.price;  // depot water: price is a ceiling, no market to flood
+    it.value = take * it.realized * it.chance;
     revenue += it.value;
   }
-  const payload = S.returnCap * 1000 - cap;
-  const propRet = (dry + payload) * mrRet;
+  const payload = S.returnCap * 1000 - cap, shield = payload * shieldK;
+  const propRet = (dry + payload + shield) * mrRet;
   const launchedRet = useIsru ? 0 : propRet;
   const dvOut = (S.base === 'moon' ? o.dv.moon : o.dv.leo) + o.dv.dvArr;
-  const propOut = (dry + launchedRet) * (Math.exp(dvOut / ve) - 1);
-  const launchMass = dry + launchedRet + propOut;
-  const perKg = S.base === 'moon' ? S.costEarth * S.moonPct / 100 : S.costEarth;
+  const outMass = dry + shield + launchedRet;
+  const propOut = outMass * (Math.exp(dvOut / v) - 1);
+  const trips = Math.max(1, S.trips || 1);
+  const launchMass = dry / trips + shield + launchedRet + propOut;   // the spacecraft itself is launched once
   const years = 2 * o.dv.transferYr + S.stayMonths / 12;
-  const costLaunch = launchMass * perKg;
+  const costLaunch = launchMass * perKgLaunch(S);
   const costProc = (ore / 1000) * S.procCost;
-  const costFixed = S.buildCost * 1e6 + S.opsCost * 1e6 * years;
+  const costFixed = S.buildCost * 1e6 / trips + S.opsCost * 1e6 * years;
   const cost = costLaunch + costProc + costFixed;
   const expRevenue = revenue * (1 - S.risk / 100);
   const profit = expRevenue - cost;
   return {
-    items, revenue, expRevenue, cost, costLaunch, costProc, costFixed, profit, roi: profit / cost,
-    launchMass, propOut, propRet, useIsru, payload, ore, dvOut, dvRet: o.dv.ret, years,
-    perTonne: payload > 0 ? expRevenue / (payload / 1000) : 0,
+    to, items, revenue, expRevenue, cost, costLaunch, costProc, costFixed, profit, roi: profit / cost,
+    launchMass, propOut, propRet, useIsru, payload, shield, ore, dvOut, dvRet, years, trips,
   };
+}
+export function evaluate(o, S, prices) {
+  const a = route(o, S, prices, 'earth'), b = route(o, S, prices, 'depot');
+  return b.revenue > 0 && b.profit > a.profit ? b : a;
 }
 
 export function assignTiers(objs, extra = []) {

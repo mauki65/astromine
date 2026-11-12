@@ -149,6 +149,7 @@ async function prices() {
   let prev = {};
   try { prev = JSON.parse(await readFile(new URL('prices.json', DATA), 'utf8')); } catch {}
   const p = structuredClone(prev.metals || {});
+  delete p.water; delete p.Ag;  // water is priced from launch cost (js/model.js); silver is not modelled
   const now = new Date().toISOString();
   // Guard against bad feed values: plausible absolute range ($/kg) and no >40% jump vs the last good value.
   const set = (k, usdPerKg, source, asOf = now) => {
@@ -159,7 +160,7 @@ async function prices() {
   };
 
   // Live spot (gold-api.com): XAU XAG XPT XPD per ozt, HG per lb
-  for (const [sym, key, conv] of [['XAU', 'Au', 1 / OZT], ['XAG', 'Ag', 1 / OZT], ['XPT', 'Pt', 1 / OZT], ['XPD', 'Pd', 1 / OZT], ['HG', 'Cu', 2.20462]]) {
+  for (const [sym, key, conv] of [['XAU', 'Au', 1 / OZT], ['XPT', 'Pt', 1 / OZT], ['XPD', 'Pd', 1 / OZT], ['HG', 'Cu', 2.20462]]) {
     try { const j = await getJSON(`https://api.gold-api.com/price/${sym}`); set(key, j.price * conv, 'gold-api.com spot', j.updatedAt || now); }
     catch (e) { console.warn('gold-api', sym, e.message); }
   }

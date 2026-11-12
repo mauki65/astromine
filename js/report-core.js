@@ -1,6 +1,6 @@
 // Report renderer shared by the hourly job (static HTML for search engines) and the
 // report page in the browser (re-renders with live prices). Same pipeline as the map.
-import { MATERIALS, ORDER, TIERS, DEFAULTS, EVIDENCE } from './model.js';
+import { MATERIALS, ORDER, TIERS, DEFAULTS, EVIDENCE, waterPrice } from './model.js';
 import { shortName as short } from './pipeline.js';
 
 const money = v => { const a = Math.abs(v), s = v < 0 ? '−' : ''; return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `${s}$${(a / 1e3).toFixed(1)}k` : `${s}$${a.toFixed(0)}`; };
@@ -24,7 +24,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   const profitable = A.filter(o => o.ev.profit > 0).length;
   const top = A.slice(0, 10), best = top[0];
   const lead = best
-    ? `At ${live ? 'live' : 'current'} metal prices and default mission costs, <b>${profitable.toLocaleString()}</b> of ${A.length.toLocaleString()} tracked asteroids would turn a profit. The best target is <b>${esc(short(best.name))}</b> at an expected <b>${money(best.ev.profit)}</b> per mission${best.lam ? `, with its cheapest launch window on <b>${jdDate(best.lam.t0)}</b>` : ''}.`
+    ? `At ${live ? 'live' : 'current'} metal prices and default mission costs, <b>${profitable.toLocaleString()}</b> of ${A.length.toLocaleString()} tracked asteroids would turn a profit. The best target is <b>${esc(short(best.name))}</b> at an expected <b>${money(best.ev.profit)}</b> per trip${best.lam ? `, with its cheapest launch window on <b>${jdDate(best.lam.t0)}</b>` : ''}.`
     : 'No data.';
   const desc = best ? `Best asteroid mining target now: ${short(best.name)} (${money(best.ev.profit)}/mission). ${profitable} profitable of ${A.length.toLocaleString()} tracked, live NASA data.` : '';
 
@@ -73,9 +73,9 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   <a class="cta" href="../">Open the live map →</a>
 
   <h2>Top 10 targets right now</h2>
-  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. <b>Key assumption:</b> water-rich asteroids earn mostly from water, valued at $${Math.round(prices.water || 0).toLocaleString('en-US')}/kg as rocket propellant delivered in Earth orbit — no such market exists yet. Change the assumptions on the map.</p>
+  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. Spacecraft ($${(S.buildCost / 1000).toFixed(1)}B) reused for ${S.trips} trips. <b>Key assumption:</b> water is sold as rocket fuel at a depot near the Moon for $${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg — what launching the same water from Earth would cost. No such market exists yet. Change the assumptions on the map.</p>
   <div class="tablewrap"><table>
-    <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / mission</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">vs last week</th></tr></thead>
+    <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / trip</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">vs last week</th></tr></thead>
     <tbody>${topRows}</tbody></table></div>
 
   <div class="cols">
@@ -92,7 +92,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   </div>
 
   <h2>About this report</h2>
-  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database, with gaps filled from SsODNet (Berthier et al. 2023); round-trip trajectories are computed hourly for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Ag, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for the rest. This is an exploration tool, not investment advice.</p>`;
+  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database, with gaps filled from SsODNet (Berthier et al. 2023); round-trip trajectories are computed hourly for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for Os, Ni, Co, Fe; water is priced from the launch cost. This is an exploration tool, not investment advice.</p>`;
   return { title: titleFor(), desc, main };
 }
 

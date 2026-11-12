@@ -3,7 +3,7 @@
 // the repo owner). Covers data integrity, physics sanity, known reference objects and
 // consistency between the map pipeline and the report page.
 import { readFile } from 'node:fs/promises';
-import { ORDER, TIERS, DEFAULTS, CLASSES } from '../js/model.js';
+import { ORDER, TIERS, DEFAULTS, CLASSES, waterPrice } from '../js/model.js';
 import { buildObjects, rankAll, pricesFrom, decodeLambert, PRICE_BOUNDS, LAM_VERSION, shortName } from '../js/pipeline.js';
 import { lambert, body, stateAt, depLEO, depMoon, entrySpeed } from '../js/lambert.js';
 import { jdNow, planetElements } from '../js/orbits.js';
@@ -36,12 +36,22 @@ const lam = decodeLambert(lamRaw);
   check(r > 0.983 && r < 1.017, `Earth–Sun distance ${r} AU out of range`);
 }
 
+// ---------- 1b. economic consistency (assumptions must not contradict each other) ----------
+{
+  const wp = waterPrice(DEFAULTS), wp2 = waterPrice({ ...DEFAULTS, costEarth: DEFAULTS.costEarth * 2 });
+  // water at the depot can never be worth more than launching Earth water there, nor less than launching it to LEO
+  check(wp > DEFAULTS.costEarth && wp < DEFAULTS.costEarth * 4, `water price ${wp} not tied to launch cost ${DEFAULTS.costEarth}`);
+  check(near(wp2 / wp, 2, 1e-9), 'water price does not follow launch cost');
+  check(waterPrice({ ...DEFAULTS, base: 'moon' }) <= wp, 'Moon-base water dearer than Earth-launched water');
+  check(DEFAULTS.trips >= 1 && DEFAULTS.buildCost >= 300, 'spacecraft cost/trips defaults implausible');
+}
+
 // ---------- 2. raw data integrity ----------
 const n = ast.n ?? ast.rows?.length ?? 0;
 check(n > 40000 && n < 200000, `asteroid count ${n} unexpected`);
 check(!com || com.rows.length > 300, `comet count ${com?.rows.length} too low`);
 check(!nh || Object.keys(nh.list).length > 2000, `NHATS list too small (${Object.keys(nh?.list || {}).length})`);
-for (const k of ORDER) {
+for (const k of ORDER.filter(k => k !== 'water')) {
   const v = pr.metals[k]?.usdPerKg, [lo, hi] = PRICE_BOUNDS[k];
   check(v >= lo && v <= hi, `price ${k} = ${v} $/kg outside ${lo}–${hi}`);
 }
@@ -60,12 +70,14 @@ for (const o of objs) {
   if (!(fin(o.D) && o.D > 0.001 && o.D < 1000)) issues.push(`D=${o.D}`);
   if (!(fin(o.mass) && o.mass > 0)) issues.push('mass');
   if (!CLASSES[o.cls]) issues.push(`class ${o.cls}`);
-  for (const k of ['leo', 'moon', 'dvArr', 'ret']) if (!(fin(d[k]) && d[k] >= 0 && d[k] < 80)) issues.push(`dv.${k}=${d[k]}`);
+  for (const k of ['leo', 'moon', 'dvArr', 'ret', 'retDepot']) if (!(fin(d[k]) && d[k] >= 0 && d[k] < 80)) issues.push(`dv.${k}=${d[k]}`);
   for (const k of ['revenue', 'expRevenue', 'cost', 'profit', 'launchMass']) if (!fin(e[k])) issues.push(`ev.${k}`);
   if (e.cost <= 0 || e.launchMass <= 0) issues.push('cost/launchMass ≤ 0');
   if (e.profit > 5e9) issues.push(`implausible profit ${e.profit}`);
   for (const it of e.items) if (!(it.chance >= 0 && it.chance <= 0.97 && it.kg >= 0 && fin(it.value))) issues.push(`item ${it.k}`);
   if (e.payload > DEFAULTS.returnCap * 1000 + 1) issues.push('cargo over capacity');
+  // each cargo goes to one place: water only sells at the depot, metals only on Earth
+  for (const it of e.items) if (it.taken > 0 && (it.k === 'water') !== (e.to === 'depot')) issues.push(`${it.k} sold at ${e.to}`);
   if (issues.length && bad++ < 15) fail(`${o.name}: ${issues.join(', ')}`);
 }
 if (bad > 15) fail(`… ${bad - 15} more objects with invalid numbers`);

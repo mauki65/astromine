@@ -2,7 +2,7 @@
 // the hourly job all build objects and rank them through these functions, so every
 // number on the site comes from the same data and the same maths.
 import { ORDER, prepare, evaluate, assignTiers, applyNhats } from './model.js';
-import { depLEO, depMoon } from './lambert.js';
+import { depLEO, depMoon, entrySpeed } from './lambert.js';
 
 // asteroids.json is columnar (see scripts/fetch-data.mjs); older row format still accepted
 export function decodeRows(d) {
@@ -27,22 +27,27 @@ export function encodeLambert(meta, list) {
   return { ...meta, fields: LAM_FIELDS, list: Object.fromEntries(Object.entries(list).map(([k, r]) => [k, LAM_FIELDS.map(f => r[f])])) };
 }
 
-// $/kg; generous but excludes unit mix-ups (×31 troy oz/kg, ×1000 g/kg, ×2.2 lb/kg)
 export const PRICE_BOUNDS = { // $/kg, generous but excludes unit mix-ups (×31 troz, ×1000 g, ×2.2 lb)
-  Au: [30e3, 400e3], Ag: [300, 8e3], Pt: [15e3, 250e3], Pd: [8e3, 250e3], Rh: [30e3, 2e6], Ir: [30e3, 2e6],
-  Ru: [3e3, 400e3], Os: [3e3, 100e3], Cu: [3, 40], Ni: [5, 60], Co: [10, 200], Fe: [0.05, 5], water: [10, 1e5],
+  Au: [30e3, 400e3], Pt: [15e3, 250e3], Pd: [8e3, 250e3], Rh: [30e3, 2e6], Ir: [30e3, 2e6],
+  Ru: [3e3, 400e3], Os: [3e3, 100e3], Cu: [3, 40], Ni: [5, 60], Co: [10, 200], Fe: [0.05, 5],
 };
 
 export const shortName = n => n.replace(/^\((.*)\)$/, '$1');
 const OZT = 0.0311034768;
 
 // Trajectory quality ladder: exact Lambert round trip (hourly job) > NASA NHATS > Hohmann estimate.
+// Δv set from a Lambert round trip. The trip ends in Earth's atmosphere (metal capsule); a cargo
+// for the L1 depot drops the braking burn and instead pays its arrival speed v∞ to be captured.
+export function lamDv(r) {
+  const vArr = Math.sqrt(Math.max(0, r.vEntry ** 2 - entrySpeed(0) ** 2));
+  return {
+    leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3,
+    retDepot: r.d3 - Math.max(0, r.vEntry - 12) + vArr, transferYr: (r.tof + r.tofRet) / 2 / 365.25,
+  };
+}
 export function applyLambert(o, r) {
   o.lam = r;
-  Object.assign(o.dv, {
-    leo: depLEO(r.vinf), moon: depMoon(r.vinf), dvArr: r.arr, ret: r.d3,
-    transferYr: (r.tof + r.tofRet) / 2 / 365.25, src: 'lambert',
-  });
+  Object.assign(o.dv, lamDv(r), { src: 'lambert' });
 }
 
 function tkeys(name) {
@@ -114,7 +119,7 @@ export function pricesFrom(metals, overrides = {}) {
 }
 
 // Live spot prices (gold-api.com, CORS-enabled). Mutates `metals`; returns true if anything changed.
-const LIVE = { XAU: 'Au', XAG: 'Ag', XPT: 'Pt', XPD: 'Pd', HG: 'Cu' };
+const LIVE = { XAU: 'Au', XPT: 'Pt', XPD: 'Pd', HG: 'Cu' };
 export async function refreshSpot(metals) {
   let changed = false;
   await Promise.all(Object.entries(LIVE).map(async ([sym, k]) => {

@@ -41,7 +41,7 @@ let done = 0;
 for (const o of todo) {
   if (Date.now() - t0 > BUDGET_MS) break;
   const M = o.ma * Math.PI / 180 + Math.sqrt(2.9591220828559e-4 / o.a ** 3) * (jd - o.epoch);
-  const r = porkchop(earth, body(o.a, o.e, o.i, o.om, o.w, M, jd), jd, { stayDays, step: 10 });
+  const r = porkchop(earth, body(o.a, o.e, o.i, o.om, o.w, M, jd), jd, { stayDays });
   done++;
   if (r) list[o.name] = {
     t0: Math.round(r.t0 * 10) / 10, tof: r.tof, tofRet: r.tofRet, t1: Math.round(r.t1 * 10) / 10, t2: Math.round(r.t2 * 10) / 10,
