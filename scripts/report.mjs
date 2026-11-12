@@ -111,7 +111,7 @@ await writeFile(new URL('llms.txt', ROOT), `# Astromine
 > Astromine (https://astromine.live) is a free, live, interactive map of ${NF} real asteroids that ranks each one from Common to Mythic by the expected profit of a mining mission, using NASA/JPL orbit data, exact round-trip trajectories computed hourly, and live metal prices. It is an exploration and education tool, not investment advice.
 
 Snapshot updated ${updated}:
-- Profitable under default assumptions: ${PF} of ${NF} tracked asteroids (${waterLed} of them from water sold as rocket fuel at an Earth–Moon L1 depot, valued at the cost of launching Earth water there: $${Math.round(waterPrice(DEFAULTS)).toLocaleString('en-US')}/kg; spacecraft reused for ${DEFAULTS.trips} trips)
+- Profitable under default assumptions: ${PF} of ${NF} tracked asteroids (${waterLed === PF ? 'all' : `${waterLed} of them`} from water sold as rocket fuel at an Earth–Moon L1 depot, valued at the cost of launching Earth water there: $${Math.round(waterPrice(DEFAULTS)).toLocaleString('en-US')}/kg; spacecraft reused for ${DEFAULTS.trips} trips)
 - Top targets: ${top3.join('; ')}
 ${psyche ? `- 16 Psyche: rank #${psyche.rank.toLocaleString('en-US')} (${money(psyche.ev.profit)} per trip) — headline "$10 quintillion" values ignore cargo limits and price collapse\n` : ''}
 ## Pages
