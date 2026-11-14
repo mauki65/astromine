@@ -174,3 +174,9 @@ h3{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)
 
 /* phones: the whole card scrolls as one, so the profit is visible right under the title */
 @media (max-width:860px){#detail{display:block;overflow:auto}#detail .db{overflow:visible}.dthumb{display:none}.panel.right{max-height:50%}}
+
+/* Top targets can be folded away like Mission control */
+.phr{display:flex;align-items:center;gap:10px}
+#targets.collapsed>:not(.ph){display:none}
+#targets.collapsed .ph{border-bottom:0}
+@media (min-width:861px){.panel.right:has(#targets.collapsed:not([hidden])){bottom:auto}}

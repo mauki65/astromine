@@ -30,6 +30,6 @@ export const GUIDE_HTML = `
 <li>Propellant from the rocket equation with your Isp. Return fuel can be made from asteroid water (C- and D-types, comets). What is left over is the water sold at the depot. Up to 50,000 t of rock is processed per stay.</li>
 <li>Cargo is filled with the most valuable material first, and only with material worth more than it costs to carry home — iron and nickel stay behind. Selling hundreds of tonnes of rhodium crashes its price — the market-impact switch models that.</li>
 <li>Profit = expected revenue × (1 − failure risk) − launch − spacecraft − operations − processing.</li>
-<li>Rarity is your rank by expected profit: top 0.02% Mythic (and only if actually profitable), 0.5% Legendary, 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
+<li>Rarity is your rank by expected profit: top 0.02% Mythic, 0.5% Legendary (both only if the mission actually makes money), 2.5% Epic, 9% Rare, 28% Uncommon. Change your costs and the whole map re-ranks.</li>
 </ul>
 <p class="muted">First-order estimates for exploring the trade-offs, not investment advice.</p>`;

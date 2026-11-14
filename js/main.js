@@ -410,6 +410,8 @@ segment('#base', S.base, v => { S.base = v; store.set('settings', S); renderSett
 segment('#launch', S.launchMode, v => { S.launchMode = v; store.set('settings', S); resetLambert(); });
 function resetLambert() { for (const o of objs) if (o.lamDate || o.dvDate) { o.dvDate = null; o.lamDate = null; } if (st.sel) optimise(st.sel); recompute(); }
 $('#reset').onclick = () => { Object.assign(S, DEFAULTS, { v: SV }); store.set('settings', S); segment('#base', S.base); segment('#launch', S.launchMode); resetLambert(); renderSettings(); recompute(); };
+const setTargets = c => { $('#targets').classList.toggle('collapsed', c); $('#collapse-right').textContent = c ? '+' : '–'; $('#collapse-right').title = c ? 'Expand' : 'Collapse'; };
+$('#collapse-right').onclick = () => setTargets(!$('#targets').classList.contains('collapsed'));
 $('#collapse-left').onclick = () => { const p = $('#mission'); p.classList.toggle('collapsed'); $('#collapse-left').textContent = p.classList.contains('collapsed') ? '+' : '–'; };
 
 function segment(sel, val, cb) {
@@ -654,6 +656,6 @@ $('#about').innerHTML = GUIDE_HTML + '<p><a href="about/">Full guide &amp; FAQ �
 setInterval(() => { if (halos.length && !document.hidden && $('#tab-map').classList.contains('on')) present(); }, 50);
 window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const m = document.getElementById('about-modal'); if (m?.innerHTML) m.innerHTML = ''; else select(null); });
-if (innerWidth < 860) { $('#mission').classList.add('collapsed'); $('#collapse-left').textContent = '+'; }
+if (innerWidth < 860) { $('#mission').classList.add('collapsed'); $('#collapse-left').textContent = '+'; setTargets(true); }  // phones start with the map in view
 renderSettings(); renderFilters(); updateDate(); resize(); fit();
 load();

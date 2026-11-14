@@ -53,8 +53,8 @@ export const CLASSES = {
 };
 
 export const TIERS = [
-  { key: 'mythic',    label: 'Mythic',    color: '#ff2e3f', top: 0.0002 },  // top 0.02% AND profitable
-  { key: 'legendary', label: 'Legendary', color: '#ff9f1c', top: 0.005 },
+  { key: 'mythic',    label: 'Mythic',    color: '#ff2e3f', top: 0.0002, rank: 0 },  // top 0.02% AND profitable
+  { key: 'legendary', label: 'Legendary', color: '#ff9f1c', top: 0.005, rank: 1 },   // top 0.5% AND profitable
   { key: 'epic',      label: 'Epic',      color: '#b26bff', top: 0.025 },
   { key: 'rare',      label: 'Rare',      color: '#3a8bff', top: 0.09 },
   { key: 'uncommon',  label: 'Uncommon',  color: '#3fcf6e', top: 0.28 },
@@ -257,13 +257,13 @@ export function assignTiers(objs, extra = []) {
   sorted.forEach((o, r) => {
     const f = (r + 1) / n;
     o.tier = TIERS.find(t => f <= t.top);
-    if (o.tier.key === 'mythic' && !(o.ev.profit > 0)) o.tier = TIERS[1];
+    if (o.tier.rank < 2 && !(o.ev.profit > 0)) o.tier = TIERS[2];   // Mythic and Legendary must actually pay
     o.rank = r + 1;
     floor[o.tier.key] = o.ev.profit;
   });
   for (const o of extra) {
     o.tier = TIERS.find(t => floor[t.key] !== undefined && o.ev.profit >= floor[t.key]) || TIERS[TIERS.length - 1];
-    if (o.tier.key === 'mythic' && !(o.ev.profit > 0)) o.tier = TIERS[1];
+    if (o.tier.rank < 2 && !(o.ev.profit > 0)) o.tier = TIERS[2];   // Mythic and Legendary must actually pay
     let lo = 0, hi = n;  // rank = position among asteroids
     while (lo < hi) { const m = (lo + hi) >> 1; sorted[m].ev.profit > o.ev.profit ? lo = m + 1 : hi = m; }
     o.rank = lo + 1;

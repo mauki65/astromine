@@ -118,7 +118,7 @@ const A = ranked.filter(o => !o.comet);
 const counts = Object.fromEntries(TIERS.map(t => [t.key, A.filter(o => o.tier.key === t.key).length]));
 check(Object.values(counts).reduce((a, b) => a + b, 0) === A.length, 'tier counts do not add up');
 check(A.every((o, i) => o.rank === i + 1), 'ranks not sequential');
-check(A.filter(o => o.tier.key === 'mythic').every(o => o.ev.profit > 0), 'unprofitable Mythic');
+check(A.filter(o => o.tier.key === 'mythic' || o.tier.key === 'legendary').every(o => o.ev.profit > 0), 'unprofitable Mythic/Legendary');
 check(counts.mythic <= Math.ceil(A.length * 0.0002) + 1, `too many Mythic (${counts.mythic})`);
 for (let i = 1; i < A.length; i++) if (A[i].ev.profit > A[i - 1].ev.profit + 1e-6) { fail(`ranking not sorted at #${i + 1}`); break; }
 
