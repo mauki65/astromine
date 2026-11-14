@@ -86,20 +86,27 @@ function classify(o) {
   if (num && GROUND_TRUTH[num]) return { ...GROUND_TRUTH[num], conf: 0.97, evidence: 'sample' };
   if (num && WELL_STUDIED[num]) return { ...WELL_STUDIED[num], conf: 0.9, evidence: 'measured' };
   if (o.comet) return { cls: 'K', conf: 0.8, basis: `Comet (${o.class || 'short-period'}) – Rosetta/67P analogue`, evidence: 'measured' };
-  const t = (o.spec_B || o.spec_T || '').trim();
+  const sB = (o.spec_B || '').trim(), sT = (o.spec_T || '').trim();
+  // Bus X-types cannot tell metal from enstatite or dark primitive rock; Tholen's M/E/P classes used albedo, so they win.
+  const t = /^X/i.test(sB) && /^[MEP]/i.test(sT) ? sT : sB || sT;
   if (t) {
     const s = t.replace(/[^A-Za-z]/g, '');
     const u = s.toUpperCase();
     let c = 'S';
     if (/^M/.test(u)) c = 'M';
-    else if (/^XE/.test(u) || /^E/.test(u)) c = 'E';
+    else if (/^E/.test(u)) c = 'E';
     else if (/^X/.test(u)) c = 'X';
     else if (/^[CBFG]/.test(u)) c = 'C';
     else if (/^[DPTZ]/.test(u)) c = 'D';   // Z: very red, D-like (Mahlke et al. 2022)
     else if (/^Q/.test(u)) c = 'Q';
     else if (/^V/.test(u)) c = 'V';
     else c = 'S';  // S, Sq, Sr, K, L, A, O, R...
-    return { cls: c, conf: 0.85, basis: `Spectral type ${t}`, evidence: 'measured' };
+    let basis = `Spectral type ${t}`;
+    if (c === 'X' && o.albedo != null) {   // the albedo splits the X complex the way Tholen did (E bright, P dark)
+      if (o.albedo >= 0.3) { c = 'E'; basis += `, bright (albedo ${o.albedo.toFixed(2)})`; }
+      else if (o.albedo < 0.1) { c = 'D'; basis += `, dark (albedo ${o.albedo.toFixed(2)}, P-like)`; }
+    }
+    return { cls: c, conf: 0.85, basis, evidence: 'measured' };
   }
   if (o.albedo != null) {
     const p = o.albedo;

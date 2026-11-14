@@ -89,7 +89,8 @@ export function buildObjects(data, extra) {
     const o = prepare(r, F);
     if (tech) {
       const spec = /spec/i.test(tech);
-      o.basis = `${spec ? 'Spectrum' : 'Survey colours (Gaia/SDSS)'} – type ${o.spec_T} (SsODNet)`;
+      const tail = o.basis.match(/, (?:bright|dark) .*$/)?.[0] || '';   // albedo note from classify()
+      o.basis = `${spec ? 'Spectrum' : 'Survey colours (Gaia/SDSS)'} – type ${o.spec_T} (SsODNet)${tail}`;
       if (!spec) o.conf = 0.7;
     }
     o.keys = keysOf(o);
