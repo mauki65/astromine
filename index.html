@@ -33,7 +33,7 @@
 
 <main>
   <section id="tab-map" class="tab on">
-    <canvas id="map"></canvas>
+    <canvas id="map" role="img" aria-label="Live map of asteroids from Venus to Saturn, coloured by mining profit"></canvas>
     <div id="tip" class="tip"></div>
 
     <aside class="panel left" id="mission">
@@ -56,7 +56,7 @@
       <div id="detail" hidden></div>
       <div id="targets">
         <div class="ph"><span>Top targets</span><span class="muted" id="tcount"></span></div>
-        <input id="search" type="search" placeholder="Search asteroid…" autocomplete="off">
+        <input id="search" type="search" placeholder="Search asteroid…" aria-label="Search asteroid by name" autocomplete="off">
         <div class="filters" id="filters"></div>
         <ol id="tlist"></ol>
       </div>
@@ -85,7 +85,7 @@
       <p class="muted" id="mat-status"></p>
       <div class="tablewrap"><table id="mat-table"></table></div>
       <h2>Expected value of one tonne of raw asteroid, by type</h2>
-      <p class="muted">Bulk grade × current price, before recovery losses. Shows why metallic asteroids are the jackpot and why stony ones rarely pay.</p>
+      <p class="muted">Bulk grade × current price, before recovery losses. Per tonne, water for rocket fuel is worth far more than the metals — but only at a depot in space, and only while launching it from Earth stays expensive.</p>
       <div class="tablewrap"><table id="class-table"></table></div>
     </div>
   </section>

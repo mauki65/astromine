@@ -1,4 +1,4 @@
-import { depLEO, depMoon, entrySpeed } from './lambert.js';
+import { depLEO, depMoon, entrySpeed, capL1 } from './lambert.js';
 // Composition, physical estimates, delta-v and mission economics.
 // All numbers are first-order estimates from meteorite analogues and patched-conic orbital mechanics.
 
@@ -61,24 +61,30 @@ export const TIERS = [
   { key: 'common',    label: 'Common',    color: '#8a8f98', top: 1 },
 ];
 
-// Bodies visited by spacecraft: composition from returned samples / in-situ measurements.
+// Bodies studied up close by a spacecraft: composition from returned samples / in-situ measurements.
 const GROUND_TRUTH = {
+  '1':      { cls: 'C', basis: 'Dawn orbiter (2015–18): carbon-rich, hydrated minerals and water ice' },
   '162173': { cls: 'C', basis: 'Hayabusa2 returned sample (2020): CI-chondrite-like, hydrated clays' },
   '101955': { cls: 'C', basis: 'OSIRIS-REx returned sample (2023): carbon- and water-rich' },
   '25143':  { cls: 'S', basis: 'Hayabusa returned sample (2010): LL ordinary chondrite' },
   '433':    { cls: 'S', basis: 'NEAR Shoemaker orbiter (2000–01): ordinary-chondrite composition' },
   '4':      { cls: 'V', basis: 'Dawn orbiter (2011–12): basaltic HED parent body' },
-  '16':     { cls: 'M', basis: 'Spectra + radar: metal-rich; NASA Psyche mission arrives 2029' },
+};
+// Not visited yet, but well characterised from the ground (radar + spectra) – overrides the survey class.
+const WELL_STUDIED = {
+  '16':   { cls: 'M', basis: 'Spectra + radar: metal-rich; NASA’s Psyche spacecraft arrives in 2029' },
+  '6178': { cls: 'M', basis: 'Radar (Ostro et al. 1991) + near-infrared spectra (Sanchez et al. 2021): metal-rich' },
 };
 export const EVIDENCE = {
-  sample:   { label: 'Confirmed',  color: '#3fcf6e', note: 'Visited by a spacecraft or sample brought back to Earth' },
-  measured: { label: 'Measured',   color: '#3a8bff', note: 'Composition measured by telescope (light spectrum)' },
+  sample:   { label: 'Confirmed',  color: '#3fcf6e', note: 'Studied up close by a spacecraft, or a sample was brought back to Earth' },
+  measured: { label: 'Measured',   color: '#3a8bff', note: 'Composition measured by telescope (light spectrum, survey colours or radar)' },
   inferred: { label: 'Estimated',  color: '#e9c46a', note: 'Estimated from how much light it reflects' },
   assumed:  { label: 'Guess',      color: '#8a909c', note: 'No data – typical for asteroids on this kind of orbit' },
 };
 function classify(o) {
   const num = (o.name || '').match(/^(\d+)\s/)?.[1];
   if (num && GROUND_TRUTH[num]) return { ...GROUND_TRUTH[num], conf: 0.97, evidence: 'sample' };
+  if (num && WELL_STUDIED[num]) return { ...WELL_STUDIED[num], conf: 0.9, evidence: 'measured' };
   if (o.comet) return { cls: 'K', conf: 0.8, basis: `Comet (${o.class || 'short-period'}) – Rosetta/67P analogue`, evidence: 'measured' };
   const t = (o.spec_B || o.spec_T || '').trim();
   if (t) {
@@ -89,10 +95,10 @@ function classify(o) {
     else if (/^XE/.test(u) || /^E/.test(u)) c = 'E';
     else if (/^X/.test(u)) c = 'X';
     else if (/^[CBFG]/.test(u)) c = 'C';
-    else if (/^[DPT]/.test(u)) c = 'D';
+    else if (/^[DPTZ]/.test(u)) c = 'D';   // Z: very red, D-like (Mahlke et al. 2022)
     else if (/^Q/.test(u)) c = 'Q';
-    else if (/^[VR]/.test(u)) c = 'V';
-    else c = 'S';  // S, Sq, Sr, K, L, A, O...
+    else if (/^V/.test(u)) c = 'V';
+    else c = 'S';  // S, Sq, Sr, K, L, A, O, R...
     return { cls: c, conf: 0.85, basis: `Spectral type ${t}`, evidence: 'measured' };
   }
   if (o.albedo != null) {
@@ -130,8 +136,8 @@ function deltaV(a, e, incDeg) {
   const transferYr = Math.min(8, Math.max(0.25, 0.5 * Math.pow(at, 1.5)));
   // return: leave the asteroid (≈ arrival burn, +0.3 margin) and, if Earth arrival is too fast for a 12 km/s entry, brake
   const ret = dvArr + 0.3 + Math.max(0, entrySpeed(vinf) - 12);
-  // to the depot instead: no atmosphere to slow down in, so capture costs ≈ the arrival speed v∞
-  const retDepot = dvArr + 0.3 + vinf;
+  // to the depot instead: no atmosphere to slow down in – brake at perigee and match L1 (see capL1)
+  const retDepot = dvArr + 0.3 + capL1(vinf);
   return { vinf, dvArr, leo, moon, ret, retDepot, transferYr, src: 'estimate' };
 }
 
@@ -170,7 +176,7 @@ export const DEFAULTS = {
 const DEPOT = { fromLEO: 3.77, fromLLO: 0.64 };  // km/s to Earth–Moon L1
 const SHIELD = 0.15;                              // heat-shield capsule mass per kg of metal cargo
 const G0 = 9.80665;
-const ve = S => S.isp * G0 / 1000;
+const ve = S => Math.max(50, S.isp) * G0 / 1000;   // floor keeps half-typed inputs finite
 const perKgLaunch = S => S.base === 'moon' ? S.costEarth * S.moonPct / 100 : S.costEarth;
 export function waterPrice(S) {
   const viaEarth = S.costEarth * Math.exp(DEPOT.fromLEO / ve(S));

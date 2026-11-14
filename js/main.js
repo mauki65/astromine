@@ -1,6 +1,6 @@
 import { MATERIALS, ORDER, CLASSES, TIERS, DEFAULTS, EVIDENCE, evaluate, waterPrice } from './model.js';
 import { buildObjects, rankAll, pricesFrom, refreshSpot, applyLambert, decodeLambert, lamDv } from './pipeline.js';
-import { body, fixedLaunch, entrySpeed } from './lambert.js';
+import { body, fixedLaunch, entrySpeed, capL1 } from './lambert.js';
 import { openAbout, photoOf, credit } from './about.js';
 import { GUIDE_HTML } from './guide.js';
 import { jdNow, orbitBasis, posAt, orbitPath, planets, moonAngle, planetElements } from './orbits.js';
@@ -94,12 +94,15 @@ function recomputeNow() {
 function recompute() { clearTimeout(rcTimer); rcTimer = setTimeout(recomputeNow, 30); }
 
 // ---------- map ----------
-const cv = $('#map'), ctx = cv.getContext('2d');
+// The scene is drawn into an off-screen buffer; the visible canvas shows that buffer plus the pulsing
+// Mythic halos, so the animation costs one blit per frame instead of redrawing 50,000 objects.
+const cv = $('#map'), vctx = cv.getContext('2d'), buf = document.createElement('canvas'), ctx = buf.getContext('2d');
+let halos = [];
 let W = 0, H = 0, DPR = 1;
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
   W = cv.clientWidth; H = cv.clientHeight;
-  cv.width = W * DPR; cv.height = H * DPR;
+  cv.width = buf.width = W * DPR; cv.height = buf.height = H * DPR;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   draw();
 }
@@ -152,8 +155,19 @@ function shapePath(kind, x, y, r) {
 }
 
 let raf = 0;
-function draw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawNow(); }); }
+function draw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawNow(); present(); }); }
+function present() {
+  if (!buf.width || !buf.height) return;
+  vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.drawImage(buf, 0, 0);
+  if (!halos.length) return;
+  vctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+  vctx.globalAlpha = 0.15 + 0.2 * pulse; vctx.strokeStyle = TIERS[0].color; vctx.lineWidth = 1;
+  for (const [x, y, r] of halos) { vctx.beginPath(); vctx.arc(x, y, r + 6 + 3 * pulse, 0, Math.PI * 2); vctx.stroke(); }
+  vctx.globalAlpha = 1;
+}
 function drawNow() {
+  halos = [];
   ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, W, H);
   if (!pl) return;
   const O = origin(), sc = st.view.scale;
@@ -207,11 +221,7 @@ function drawNow() {
       const o = objs[k]; if (o.tier.key !== tk || !visible(o)) continue;
       const [sx, sy] = toS(posX[k], posY[k], O);
       if (sx < -10 || sy < -10 || sx > W + 10 || sy > H + 10) continue;
-      if (tk === 'mythic') {  // pulsing red halo
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
-        ctx.save(); ctx.globalAlpha = 0.15 + 0.2 * pulse; ctx.strokeStyle = T.color; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(sx, sy, rad + 6 + 3 * pulse, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-      }
+      if (tk === 'mythic') halos.push([sx, sy, rad]);  // pulsing red halo, animated in present()
       if (tk === 'legendary' || tk === 'mythic') {
         ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = T.color;
         ctx.beginPath(); ctx.arc(sx, sy, rad + 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -381,6 +391,7 @@ const FIELDS = [
   ['isru', 'Make return fuel from asteroid water', 'chk'],
   ['impact', 'Price drops if you flood the market', 'chk'],
 ];
+const PCT = new Set(['recovery', 'risk']);   // percentages cannot exceed 100
 function renderSettings() {
   $('#settings').innerHTML = FIELDS.map(([k, label, x]) => {
     if (k === 'h') return `<h4>${label}</h4>`;
@@ -389,7 +400,8 @@ function renderSettings() {
     return `<label for="s-${k}">${label}</label><input id="s-${k}" type="number" min="0" step="any" data-k="${k}" value="${S[k]}">`;
   }).join('');
   $('#settings').querySelectorAll('input').forEach(inp => inp.oninput = () => {
-    S[inp.dataset.k] = inp.type === 'checkbox' ? inp.checked : Math.max(0, +inp.value || 0);
+    const k = inp.dataset.k, v = Math.max(0, +inp.value || 0);
+    S[k] = inp.type === 'checkbox' ? inp.checked : PCT.has(k) ? Math.min(100, v) : v;
     if (inp.dataset.k === 'stayMonths') resetLambert();
     store.set('settings', S); recompute();
   });
@@ -470,6 +482,8 @@ function renderList() {
 // ---------- detail ----------
 function select(o) {
   st.sel = o;
+  // keep the address bar shareable: astromine.live/?obj=Bennu reopens this card
+  try { history.replaceState(null, '', o ? '?obj=' + encodeURIComponent(shortName(o.name)) : location.pathname); } catch {}
   $('#detail').hidden = !o; $('#targets').hidden = !!o;
   if (o) { renderDetail(o); optimise(o); }
   draw();
@@ -504,7 +518,7 @@ function lamText(o) {
   const d = o.dv, nh = d.nhats ? ` NASA NHATS best (8-day stay): ${d.nhats.dv.toFixed(2)} km/s.` : '';
   const depot = (o.evDate || o.ev).to === 'depot';
   const legs = r => `launch <b>${jdDate(r.t0)}</b>, arrive ${jdDate(r.t0 + r.tof)}, leave ${jdDate(r.t1)}, back ${jdDate(r.t2)}. ${depot
-    ? `Captured at the depot near the Moon (arrives at ${Math.sqrt(Math.max(0, r.vEntry ** 2 - entrySpeed(0) ** 2)).toFixed(1)} km/s).`
+    ? (v => `Arrives at ${v.toFixed(1)} km/s and brakes into the fuel depot near the Moon (${capL1(v).toFixed(1)} km/s burn).`)(Math.sqrt(Math.max(0, r.vEntry ** 2 - entrySpeed(0) ** 2)))
     : `Capsule enters the atmosphere at ${Math.min(12, r.vEntry).toFixed(1)} km/s${r.vEntry > 12.05 ? ` (after a braking burn from ${r.vEntry.toFixed(1)})` : ''}.`}`;
   if (S.launchMode === 'date') {
     if (o.Q > 6 || o.comet) return 'Fixed-date launches are only computed for objects within 6 AU (not comets).';
@@ -514,7 +528,7 @@ function lamText(o) {
   }
   const stayNote = o.lam && Math.round(S.stayMonths * 30.44) !== o.lam.stay ? ` <span class="muted">(windows computed for a ${Math.round(o.lam.stay / 30.44)}-month stay)</span>` : '';
   if (o.lam) return `<b>Best launch window</b> (exact trajectory, ${rt(d, depot).toFixed(2)} km/s round trip) — ${legs(o.lam)}${nh}${stayNote}`;
-  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}). Exact trajectory pending in the hourly job.`;
+  if (d.src === 'nhats') return `Δv from <b>NASA NHATS</b>: ${d.nhats.dv.toFixed(2)} km/s round trip, ${d.nhats.dur} days (launch ${d.nhats.w}). Exact trajectory pending in the next data update.`;
   return 'Δv is a Hohmann-transfer <b>estimate</b> — not a mining candidate at default costs, so no exact trajectory was computed.';
 }
 const jdDate = jd => new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
@@ -618,7 +632,7 @@ function renderMaterials() {
       const n = objs.filter(o => o.cls === c).length;
       return `<tr><td><b>${C.label}</b></td><td class="muted">${C.analog}</td><td class="num">${money(all)}</td><td class="num">${money(pgm)}</td><td class="num">${money((C.g.water || 0) * 1000 * waterPrice(S))}</td><td class="num">${n.toLocaleString()}</td></tr>`;
     }).join('') + '</tbody>';
-  $('#mat-status').innerHTML = `Gold, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium are checked hourly against Umicore (published once per business day). Others are reference values — override them to run your own scenario. Water has no market yet: its price follows your launch cost.`;
+  $('#mat-status').innerHTML = `Gold, platinum, palladium and copper refresh live every minute from gold-api.com. Rhodium, iridium and ruthenium are checked against Umicore several times a day (published once per business day). Others are reference values — override them to run your own scenario. Water has no market yet: its price follows your launch cost.`;
 }
 
 // ---------- status ----------
@@ -637,7 +651,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 
 $('#about').innerHTML = GUIDE_HTML + '<p><a href="about/">Full guide &amp; FAQ →</a></p>';
 
-setInterval(() => { if (!st.playing && ranked.some(o => o.tier.key === 'mythic' && st.tiers.has('mythic'))) draw(); }, 50);
+setInterval(() => { if (halos.length && !document.hidden && $('#tab-map').classList.contains('on')) present(); }, 50);
 window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const m = document.getElementById('about-modal'); if (m?.innerHTML) m.innerHTML = ''; else select(null); });
 if (innerWidth < 860) { $('#mission').classList.add('collapsed'); $('#collapse-left').textContent = '+'; }

@@ -5,7 +5,7 @@
 import { readFile } from 'node:fs/promises';
 import { ORDER, TIERS, DEFAULTS, CLASSES, waterPrice } from '../js/model.js';
 import { buildObjects, rankAll, pricesFrom, decodeLambert, PRICE_BOUNDS, LAM_VERSION, shortName } from '../js/pipeline.js';
-import { lambert, body, stateAt, depLEO, depMoon, entrySpeed } from '../js/lambert.js';
+import { lambert, body, stateAt, depLEO, depMoon, entrySpeed, capL1 } from '../js/lambert.js';
 import { jdNow, planetElements } from '../js/orbits.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -32,6 +32,8 @@ const lam = decodeLambert(lamRaw);
   check(near(depLEO(2.94), 3.567, 0.01), `LEO→Mars departure ${depLEO(2.94)} ≠ 3.57`);
   check(near(depMoon(0), 0.72, 0.05), `LLO escape Δv ${depMoon(0)} ≠ ~0.7`);
   check(near(entrySpeed(0), 11.08, 0.01) && near(entrySpeed(4.62), 12.0, 0.02), 'entry-speed formula');
+  // depot capture mirrors the 3.77 km/s LEO → L1 transfer: capL1(v) = depLEO(v) − 3.065 + 0.705
+  check(near(capL1(0), 0.816, 0.01) && near(capL1(4), 1.53, 0.02) && near(depLEO(3) - capL1(3), 2.36, 0.001), `L1 capture formula ${capL1(0)}`);
   const jd = jdNow(), pe = planetElements('Earth', jd), r = Math.hypot(...stateAt(body(pe.a, pe.e, pe.i, pe.om, pe.w, pe.M, jd), jd).r);
   check(r > 0.983 && r < 1.017, `Earth–Sun distance ${r} AU out of range`);
 }

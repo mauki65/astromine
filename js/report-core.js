@@ -13,6 +13,13 @@ const ev = o => `<span class="evd" style="background:${EVIDENCE[o.evidence].colo
 const pct = (a, b) => b ? ((a / b - 1) * 100) : null;
 const chg = v => v == null ? '<span class="muted">–</span>' : `<span class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
 
+// JPL close-approach dates look like "2026-Nov-20 03:12"; parse by hand (Date.parse differs between browsers)
+const MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+export function cadTime(s) {
+  const m = String(s).match(/^(\d{4})-(\w{3})-(\d{2})(?: (\d{2}):(\d{2}))?/);
+  return m && MON[m[2]] !== undefined ? Date.UTC(+m[1], MON[m[2]], +m[3], +(m[4] || 0), +(m[5] || 0)) : NaN;
+}
+
 function titleFor(date = new Date()) {
   return `Asteroid mining launch windows — ${date.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
 }
@@ -42,7 +49,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   }).join('');
 
   const now = Date.now();
-  const upcoming = cadList.filter(c => { const t = Date.parse(c.date.replace(/-(\w{3})-/, ' $1 ')); return t > now && t < now + 60 * 864e5; });
+  const upcoming = cadList.filter(c => { const t = cadTime(c.date); return t > now && t < now + 60 * 864e5; });
   const byKey = new Map(); for (const o of A) for (const k of o.keys || []) byKey.set(k, o);
   const caRanked = upcoming.filter(c => byKey.has(c.des)), caOther = upcoming.length - caRanked.length;
   const caRows = caRanked.map(c => {
@@ -56,7 +63,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   if (past) {
     const up = A.slice(0, 200).map(o => ({ o, d: (past.ranks[o.name] || 0) - o.rank })).filter(x => past.ranks[x.o.name] && x.d > 0).sort((a, b) => b.d - a.d).slice(0, 5);
     movers = up.length ? `<ul>${up.map(x => `<li><a href="${link(x.o)}">${esc(short(x.o.name))}</a> <span class="pos">▲ ${x.d}</span> to #${x.o.rank}</li>`).join('')}</ul>` : '<p class="muted">No rank changes in the top 200.</p>';
-  } else movers = '<p class="muted">Tracking started today — weekly movers appear after the first week.</p>';
+  } else movers = '<p class="muted">Tracking has just started — climbers appear once there is an earlier day to compare with.</p>';
 
   const priceRows = ORDER.filter(k => k !== 'water').map(k => {
     const p = prices[k], old = past?.prices?.[k];
@@ -75,7 +82,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   <h2>Top 10 targets right now</h2>
   <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. Spacecraft ($${(S.buildCost / 1000).toFixed(1)}B) reused for ${S.trips} trips. <b>Key assumption:</b> water is sold as rocket fuel at a depot near the Moon for $${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg — what launching the same water from Earth would cost. No such market exists yet. Change the assumptions on the map.</p>
   <div class="tablewrap"><table>
-    <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / trip</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">vs last week</th></tr></thead>
+    <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / trip</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">${refDate ? `Rank vs ${refDate}` : 'Rank change'}</th></tr></thead>
     <tbody>${topRows}</tbody></table></div>
 
   <div class="cols">
@@ -92,7 +99,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   </div>
 
   <h2>About this report</h2>
-  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database, with gaps filled from SsODNet (Berthier et al. 2023); round-trip trajectories are computed hourly for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for Os, Ni, Co, Fe; water is priced from the launch cost. This is an exploration tool, not investment advice.</p>`;
+  <p class="muted">Orbits, sizes, spectral types, radar measurements and close approaches come from the NASA/JPL Small-Body Database, with gaps filled from SsODNet (Berthier et al. 2023); round-trip trajectories are recomputed several times a day for every mining candidate (NASA NHATS and a Hohmann estimate fill in for the rest). Composition is inferred from asteroid type and meteorite analogues — only a handful of asteroids have been visited. Prices: gold-api.com (Au, Pt, Pd, Cu, live), Umicore (Rh, Ir, Ru), reference values for Os, Ni, Co, Fe; water is priced from the launch cost. This is an exploration tool, not investment advice.</p>`;
   return { title: titleFor(), desc, main };
 }
 

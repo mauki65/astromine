@@ -86,6 +86,11 @@ export const depMoon = vinf => { const u = Math.max(0, Math.sqrt(vinf * vinf + 1
 // Faster arrivals need a braking burn at perigee (entry - 12) before entry.
 export const entrySpeed = vinf => Math.sqrt(vinf * vinf + 11.08 ** 2);
 const brake = vinf => Math.max(0, entrySpeed(vinf) - 12);
+// Propulsive capture at the Earth–Moon L1 depot for an arrival excess vinf: brake at a 400 km perigee
+// (Oberth effect) from the hyperbola into the transfer ellipse that reaches L1 (perigee speed 10.734 km/s),
+// then match L1's speed (0.705 km/s). The mirror image of the 3.77 km/s LEO → L1 transfer used for the
+// water price: capL1(v) = depLEO(v) − 3.065 + 0.705.
+export const capL1 = vinf => Math.sqrt(vinf * vinf + 10.845 ** 2) - 10.734 + 0.705;
 
 // Search the next `years` for the cheapest round trip: coarse grid over departure date ×
 // outbound time of flight, then local refinement, then the same for the return leg.
