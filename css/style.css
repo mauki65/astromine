@@ -171,3 +171,6 @@ h3{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)
 .dthumb{margin-top:10px;cursor:pointer}
 .dthumb img,.dthumb-ph{display:block;width:100%;height:140px;object-fit:contain;background:#000;border-radius:7px}
 .dthumb span{display:block;font-size:10.5px;color:var(--muted);margin-top:4px}
+
+/* phones: the whole card scrolls as one, so the profit is visible right under the title */
+@media (max-width:860px){#detail{display:block;overflow:auto}#detail .db{overflow:visible}.dthumb{display:none}.panel.right{max-height:50%}}

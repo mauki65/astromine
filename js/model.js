@@ -196,16 +196,21 @@ function route(o, S, prices, to) {
     items.push({ k, grade, chance, kg, price: sells ? (k === 'water' ? waterPrice(S) : prices[k] || 0) : 0 });
   }
   const dvRet = to === 'depot' ? o.dv.retDepot : o.dv.ret;
-  const useIsru = S.isru && (C.g.water || 0) > 0.02;
   const dry = S.dryMass * 1000, shieldK = to === 'earth' ? SHIELD : 0;
   const mrRet = Math.exp(dvRet / v) - 1;
-  if (useIsru) {  // water first becomes return propellant (upper bound: full cargo)
-    const w = items.find(i => i.k === 'water');
-    w.kg = Math.max(0, w.kg - (dry + S.returnCap * 1000 * (1 + shieldK)) * mrRet);
-  }
+  const dvOut = (S.base === 'moon' ? o.dv.moon : o.dv.leo) + o.dv.dvArr, mrOut = Math.exp(dvOut / v) - 1;
+  // Return fuel from asteroid water – only if the rock holds enough to bring at least the empty ship home.
+  const w = items.find(i => i.k === 'water');
+  const useIsru = S.isru && (C.g.water || 0) > 0.02 && w.kg >= dry * mrRet;
+  // Water sold at the depot is what is left after fuelling the trip home (the cargo itself needs fuel too).
+  if (useIsru && to === 'depot') w.kg = (w.kg - dry * mrRet) / (1 + mrRet);
+  // What one more kg of cargo costs to bring back: its heat shield, plus return fuel if that is launched
+  // from Earth, all of which must first be pushed out to the asteroid. Cargo worth less than this stays behind
+  // (nobody hauls 300 t of nickel home at a loss).
+  const carry = (shieldK + (useIsru ? 0 : (1 + shieldK) * mrRet)) * (1 + mrOut) * perKgLaunch(S);
   let cap = S.returnCap * 1000, revenue = 0;
   for (const it of [...items].sort((a, b) => b.price * b.chance - a.price * a.chance)) {
-    const take = it.price > 0 ? Math.min(it.kg, cap) : 0;
+    const take = it.price * it.chance * (1 - S.risk / 100) > carry ? Math.min(it.kg, cap) : 0;
     it.taken = take; cap -= take;
     const sup = MATERIALS[it.k].supply;
     it.realized = S.impact && sup ? it.price / (1 + take / (sup * 1000)) : it.price;  // depot water: price is a ceiling, no market to flood
@@ -215,9 +220,8 @@ function route(o, S, prices, to) {
   const payload = S.returnCap * 1000 - cap, shield = payload * shieldK;
   const propRet = (dry + payload + shield) * mrRet;
   const launchedRet = useIsru ? 0 : propRet;
-  const dvOut = (S.base === 'moon' ? o.dv.moon : o.dv.leo) + o.dv.dvArr;
   const outMass = dry + shield + launchedRet;
-  const propOut = outMass * (Math.exp(dvOut / v) - 1);
+  const propOut = outMass * mrOut;
   const trips = Math.max(1, S.trips || 1);
   const launchMass = dry / trips + shield + launchedRet + propOut;   // the spacecraft itself is launched once
   const years = 2 * o.dv.transferYr + S.stayMonths / 12;

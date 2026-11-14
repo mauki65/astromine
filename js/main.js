@@ -566,7 +566,7 @@ function renderDetail(o) {
     </tbody></table>
     <div class="note">${ev.to === 'depot'
       ? `Sold at a fuel depot near the Moon (Earth–Moon L1). Water is valued at <b>$${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg</b> — what it would cost to launch the same water there from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'}. No such market exists yet.`
-      : `Brought to Earth in a heat-shielded capsule and sold at market prices.`} Chance × grade × recovery × price, most valuable first, up to ${S.returnCap} t.</div>
+      : `Brought to Earth in a heat-shielded capsule and sold at market prices.`} Chance × grade × recovery × price, most valuable first, up to ${S.returnCap} t. Cargo worth less than it costs to carry home stays behind.</div>
     <h3>Economics</h3>
     <div class="kv">
       <span>Expected revenue (after ${S.risk}% risk)</span><span class="pos">${money(ev.expRevenue)}</span>
