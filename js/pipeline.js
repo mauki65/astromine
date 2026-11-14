@@ -87,7 +87,7 @@ export function buildObjects(data, extra) {
       }
     }
     const o = prepare(r, F);
-    if (tech) {
+    if (tech && o.basis.startsWith('Spectral type')) {   // not for curated objects (spacecraft / radar evidence)
       const spec = /spec/i.test(tech);
       const tail = o.basis.match(/, (?:bright|dark) .*$/)?.[0] || '';   // albedo note from classify()
       o.basis = `${spec ? 'Spectrum' : 'Survey colours (Gaia/SDSS)'} – type ${o.spec_T} (SsODNet)${tail}`;
