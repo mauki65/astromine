@@ -80,7 +80,7 @@ export function renderReport({ ranked, prices, cadList = [], past = null, refDat
   <a class="cta" href="../">Open the live map →</a>
 
   <h2>Top 10 targets right now</h2>
-  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. Spacecraft ($${(S.buildCost / 1000).toFixed(1)}B) reused for ${S.trips} trips. <b>Key assumption:</b> water is sold as rocket fuel at a depot near the Moon for $${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg — what launching the same water from Earth would cost. No such market exists yet. Change the assumptions on the map.</p>
+  <p class="muted">Default mission: launch from low Earth orbit at $${S.costEarth}/kg, ${S.stayMonths}-month stay, ${S.returnCap} t cargo back. Launch dates are exact trajectories over the next 10 years. Spacecraft ($${(S.buildCost / 1000).toFixed(1)}B) reused for ${S.trips} trips. <b>Key assumption:</b> water is sold as rocket fuel at a depot near the Moon for $${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg — 20% below what launching the same water from Earth would cost. No such market exists yet. Change the assumptions on the map.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>#</th><th>Object</th><th>Tier</th><th style="text-align:right">Profit / trip</th><th style="text-align:right">Δv round trip</th><th style="text-align:right">Best launch</th><th style="text-align:right">${refDate ? `Rank vs ${refDate}` : 'Rank change'}</th></tr></thead>
     <tbody>${topRows}</tbody></table></div>

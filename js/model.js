@@ -172,8 +172,9 @@ export function prepare(row, F) {
 // ---------- Economics ----------
 // Two ways to sell a cargo, and each mission takes the better one:
 //  • metals → Earth: a heat-shielded capsule enters the atmosphere, metals sell at market prices;
-//  • water  → fuel depot at Earth–Moon L1: there is no market yet, so water is worth what it would
-//    cost to launch the same water from Earth (or the Moon) to the depot – never more.
+//  • water  → fuel depot at Earth–Moon L1: there is no market yet. Buyers' alternative is to launch
+//    water from Earth (or the Moon) to the depot, so asteroid water must sell below that cost –
+//    a new, unproven supplier is assumed to need a 20% discount to win contracts.
 // The spacecraft is reused for several trips; its build cost and launch are shared between them.
 export const DEFAULTS = {
   base: 'earth', costEarth: 500, moonPct: 10, dryMass: 25, buildCost: 1000, trips: 10, opsCost: 10,
@@ -181,13 +182,15 @@ export const DEFAULTS = {
   isru: true, impact: true, launchMode: 'best',
 };
 const DEPOT = { fromLEO: 3.77, fromLLO: 0.64 };  // km/s to Earth–Moon L1
+export const WATER_DISCOUNT = 0.2;               // asteroid water sells this much below the launch alternative
 const SHIELD = 0.15;                              // heat-shield capsule mass per kg of metal cargo
 const G0 = 9.80665;
 const ve = S => Math.max(50, S.isp) * G0 / 1000;   // floor keeps half-typed inputs finite
 const perKgLaunch = S => S.base === 'moon' ? S.costEarth * S.moonPct / 100 : S.costEarth;
 export function waterPrice(S) {
   const viaEarth = S.costEarth * Math.exp(DEPOT.fromLEO / ve(S));
-  return S.base === 'moon' ? Math.min(viaEarth, perKgLaunch(S) * Math.exp(DEPOT.fromLLO / ve(S))) : viaEarth;
+  const alt = S.base === 'moon' ? Math.min(viaEarth, perKgLaunch(S) * Math.exp(DEPOT.fromLLO / ve(S))) : viaEarth;
+  return alt * (1 - WATER_DISCOUNT);
 }
 
 function route(o, S, prices, to) {

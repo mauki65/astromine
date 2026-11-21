@@ -55,3 +55,9 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true   # GitHub's Pages API sometimes can't find a just-uploaded artifact
+      - name: Retry deploy once if GitHub had a hiccup
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 90
+      - if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4

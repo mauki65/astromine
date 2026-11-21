@@ -567,7 +567,7 @@ function renderDetail(o) {
       <td title="Chance it is present at this grade">${Math.round(i.chance * 100)}%</td><td title="Grade">${grade(i.grade)}</td><td title="Returned">${i.taken > 0 ? mass(i.taken) : '–'}</td><td title="Expected value">${i.value > 0 ? money(i.value) : '–'}</td></tr>`).join('')}
     </tbody></table>
     <div class="note">${ev.to === 'depot'
-      ? `Sold at a fuel depot near the Moon (Earth–Moon L1). Water is valued at <b>$${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg</b> — what it would cost to launch the same water there from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'}. No such market exists yet.`
+      ? `Sold at a fuel depot near the Moon (Earth–Moon L1). Water is valued at <b>$${Math.round(waterPrice(S)).toLocaleString('en-US')}/kg</b> — 20% below what launching the same water there from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'} would cost. No such market exists yet.`
       : `Brought to Earth in a heat-shielded capsule and sold at market prices.`} Chance × grade × recovery × price, most valuable first, up to ${S.returnCap} t. Cargo worth less than it costs to carry home stays behind.</div>
     <h3>Economics</h3>
     <div class="kv">
@@ -609,7 +609,7 @@ function renderMaterials() {
   const tbl = $('#mat-table'); if (!tbl) return;
   const rows = ORDER.map(k => {
     const W = k === 'water', M = MATERIALS[k], ov = overrides[k] > 0;
-    const m = W ? { source: `set by launch cost: launching water from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'} to the Earth–Moon L1 depot` } : priceMeta[k] || {};
+    const m = W ? { source: `set by launch cost: 20% below launching water from ${S.base === 'moon' ? 'the Moon or Earth' : 'Earth'} to the Earth–Moon L1 depot` } : priceMeta[k] || {};
     const src = W ? '<span class="src">derived</span>' : ov ? '<span class="src">your price</span>' : m.live ? '<span class="src s-live">live</span>' : /reference/i.test(m.source || '') ? '<span class="src">reference</span>' : '<span class="src s-daily">daily</span>';
     const p = W ? waterPrice(S) : prices[k] || 0;
     const best = Object.entries(CLASSES).sort((a, b) => (b[1].g[k] || 0) - (a[1].g[k] || 0))[0];

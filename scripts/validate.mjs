@@ -43,6 +43,8 @@ const lam = decodeLambert(lamRaw);
   const wp = waterPrice(DEFAULTS), wp2 = waterPrice({ ...DEFAULTS, costEarth: DEFAULTS.costEarth * 2 });
   // water at the depot can never be worth more than launching Earth water there, nor less than launching it to LEO
   check(wp > DEFAULTS.costEarth && wp < DEFAULTS.costEarth * 4, `water price ${wp} not tied to launch cost ${DEFAULTS.costEarth}`);
+  // and it must undercut the Earth-launch alternative (launch × rocket-equation factor to L1)
+  check(wp < DEFAULTS.costEarth * Math.exp(3.77 / (DEFAULTS.isp * 9.80665 / 1000)) * 0.999, 'asteroid water not cheaper than Earth-launched water');
   check(near(wp2 / wp, 2, 1e-9), 'water price does not follow launch cost');
   check(waterPrice({ ...DEFAULTS, base: 'moon' }) <= wp, 'Moon-base water dearer than Earth-launched water');
   check(DEFAULTS.trips >= 1 && DEFAULTS.buildCost >= 300, 'spacecraft cost/trips defaults implausible');
